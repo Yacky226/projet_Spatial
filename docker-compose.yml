@@ -1,0 +1,15 @@
+﻿version: "3.8"
+
+services:
+  api_cpp:
+    build: .
+    container_name: api_antennes_cpp
+    ports:
+      - "8080:8080"
+    # Cette section est CRUCIALE pour Linux afin d'accéder à la base de l'hôte
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      # Permet de modifier la config sans reconstruire l'image (optionnel)
+      - ./config:/app/config
+    restart: always

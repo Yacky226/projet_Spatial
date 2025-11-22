@@ -1,0 +1,224 @@
+═══════════════════════════════════════════════════════════════════════════════
+  ANTENNES 5G API - CHEATSHEET WINDOWS
+═══════════════════════════════════════════════════════════════════════════════
+
+📋 DÉMARRAGE RAPIDE
+───────────────────────────────────────────────────────────────────────────────
+
+1. DÉMARRAGE COMPLET (recommandé)
+   quick-start.bat
+   OU
+   docker-compose up -d --build
+
+2. MENU INTERACTIF
+   setup.bat                    (Batch - Recommandé)
+   .\setup.ps1                  (PowerShell - Moderne)
+
+3. DÉMARRAGE SIMPLE
+   docker-compose up -d
+
+───────────────────────────────────────────────────────────────────────────────
+
+🧪 TESTS RAPIDES (sur Windows)
+───────────────────────────────────────────────────────────────────────────────
+
+Health Check :
+  curl http://localhost:8080/health
+
+Database Test :
+  curl http://localhost:8080/api/test/db
+
+Tables Info :
+  curl http://localhost:8080/api/test/tables
+
+Database Stats :
+  curl http://localhost:8080/api/test/stats
+
+Get All Antennes :
+  curl http://localhost:8080/api/antennes
+
+GeoJSON (Leaflet) :
+  curl http://localhost:8080/api/antennes/geojson
+
+───────────────────────────────────────────────────────────────────────────────
+
+📊 DOCKER COMPOSE COMMANDES
+───────────────────────────────────────────────────────────────────────────────
+
+DÉMARRAGE & ARRÊT :
+  docker-compose up -d --build       Démarrage complet
+  docker-compose up -d               Démarrage simple
+  docker-compose stop                Arrêt sans suppression
+  docker-compose down                Arrêt avec suppression
+  docker-compose down -v             Arrêt + suppression volumes
+
+RECONSTRUCTION :
+  docker-compose build --no-cache    Reconstruire les images
+
+STATUS :
+  docker-compose ps                  Voir l'état des services
+  docker-compose logs -f api         Logs en temps réel de l'API
+
+MAINTENANCE :
+  docker-compose restart api         Redémarrer l'API
+  docker-compose logs --tail 100 api Derniers 100 logs
+  docker exec -it antennes5g_api bash Entrer dans le conteneur
+
+───────────────────────────────────────────────────────────────────────────────
+
+🐘 POSTGRESQL COMMANDES (LOCAL)
+───────────────────────────────────────────────────────────────────────────────
+
+CONNEXION :
+  psql -U postgres                   Se connecter en local
+  psql -U postgres -d antennes_5g    Se connecter à la DB
+
+DANS psql :
+  \l                                 Lister les bases de données
+  \c antennes_5g                     Se connecter à antennes_5g
+  \dt                                Lister les tables
+  \df                                Lister les fonctions
+  SELECT * FROM antennes;            Voir les antennes
+  SELECT PostGIS_version();           Vérifier PostGIS
+  \q                                 Quitter
+
+CRÉATION BASE DE DONNÉES :
+  psql -U postgres -c "CREATE DATABASE antennes_5g;"
+  psql -U postgres -d antennes_5g -c "CREATE EXTENSION postgis;"
+
+───────────────────────────────────────────────────────────────────────────────
+
+🔧 CONFIGURATION IMPORTANTE
+───────────────────────────────────────────────────────────────────────────────
+
+FICHIER : docker-compose.yml
+  - Vérifiez : DB_HOST: host.docker.internal (pour Windows!)
+  - Port API : 8080
+  - Port PostgreSQL : 5432
+
+FICHIER : config/drogon.json
+  - host: "host.docker.internal"
+  - port: 5432
+  - database: "antennes_5g"
+  - user: "postgres"
+  - password: "your_password"  ⚠️ Changez ceci !
+
+───────────────────────────────────────────────────────────────────────────────
+
+📍 ENDPOINTS API
+───────────────────────────────────────────────────────────────────────────────
+
+BASE : http://localhost:8080
+
+🧪 TESTS :
+  GET /health                        Health check
+  GET /api/test/db                   Test connexion BD
+  GET /api/test/tables               Info des tables
+  GET /api/test/stats                Stats de la BD
+
+📡 ANTENNES (Read) :
+  GET /api/antennes                  Toutes les antennes
+  GET /api/antennes/{id}             Une antenne spécifique
+  GET /api/antennes/type/{type}      Antennes par type (4G, 5G)
+  GET /api/antennes/geojson          Format GeoJSON (Leaflet)
+  GET /api/antennes/{id}/couverture  Zone de couverture
+
+📡 ANTENNES (Write) :
+  POST /api/antennes                 Créer une antenne
+  PUT /api/antennes/{id}             Modifier une antenne
+  DELETE /api/antennes/{id}          Supprimer une antenne
+
+───────────────────────────────────────────────────────────────────────────────
+
+⚠️  DÉPANNAGE RAPIDE
+───────────────────────────────────────────────────────────────────────────────
+
+PROBLÈME : "Docker daemon is not running"
+SOLUTION  : Démarrez Docker Desktop et attendez 30s
+
+PROBLÈME : "could not translate host name to address"
+SOLUTION  : Vérifiez PostgreSQL : psql -U postgres
+
+PROBLÈME : "Address already in use :8080"
+SOLUTION  : Changez le port dans docker-compose.yml (8081:8080)
+
+PROBLÈME : Les logs sont vides
+SOLUTION  : docker-compose logs -f api
+
+PROBLÈME : API crash au démarrage
+SOLUTION  : Vérifiez drogon.json (syntaxe JSON)
+           Vérifiez PostgreSQL accessible
+
+───────────────────────────────────────────────────────────────────────────────
+
+📌 WORKFLOW COMPLET
+───────────────────────────────────────────────────────────────────────────────
+
+1. PRÉPARATION (une seule fois)
+   - Installer Docker Desktop
+   - Installer PostgreSQL + PostGIS
+   - Créer la DB : CREATE DATABASE antennes_5g;
+
+2. DÉMARRAGE
+   quick-start.bat
+
+3. TESTER
+   curl http://localhost:8080/health
+
+4. DÉVELOPPEMENT
+   docker-compose logs -f api      (voir les logs)
+   Modifiez votre code C++
+   docker-compose build            (recompiler)
+   docker-compose up -d            (redémarrer)
+
+5. ARRÊT
+   docker-compose down -v
+
+───────────────────────────────────────────────────────────────────────────────
+
+💡 ASTUCES
+───────────────────────────────────────────────────────────────────────────────
+
+• Utilisez Postman pour tester les endpoints
+  Importez : tests/postman_collection.json
+
+• Visualisez les données :
+  curl http://localhost:8080/api/antennes | python -m json.tool
+
+• Monitorez en temps réel :
+  docker-compose logs -f api
+
+• Redémarrage rapide (keep data) :
+  docker-compose restart api
+
+• Rebuild rapide :
+  docker-compose build && docker-compose up -d
+
+• Pour Windows, utilisez PowerShell (plus rapide) :
+  .\setup.ps1
+
+───────────────────────────────────────────────────────────────────────────────
+
+📚 RESSOURCES
+───────────────────────────────────────────────────────────────────────────────
+
+README.md                  Guide complet
+GUIDE_WINDOWS.md           Détails Windows
+Postman Collection         tests/postman_collection.json
+Dockerfile                 Détails de compilation
+docker-compose.yml         Configuration des services
+
+───────────────────────────────────────────────────────────────────────────────
+
+🆘 HELP
+───────────────────────────────────────────────────────────────────────────────
+
+Vérifier que tout est OK :
+  1. docker ps              (Services en cours d'exécution ?)
+  2. curl http://localhost:8080/health
+  3. psql -U postgres       (PostgreSQL accessible ?)
+  4. docker-compose logs -f api (Erreurs visibles ?)
+
+═══════════════════════════════════════════════════════════════════════════════
+Version : 1.0.0 | Platform : Windows 10/11 + Docker | 2024
+═══════════════════════════════════════════════════════════════════════════════

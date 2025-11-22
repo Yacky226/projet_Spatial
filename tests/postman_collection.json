@@ -1,0 +1,217 @@
+﻿{
+  "info": {
+    "name": "Antennes 5G API",
+    "description": "Collection pour tester l'API de gestion des antennes 5G",
+    "version": "1.0.0"
+  },
+  "item": [
+    {
+      "name": "🧪 TESTS",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:8080/health",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8080",
+              "path": ["health"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Database Connection Test",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:8080/api/test/db",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8080",
+              "path": ["api", "test", "db"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Tables Information",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:8080/api/test/tables",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8080",
+              "path": ["api", "test", "tables"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Database Statistics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:8080/api/test/stats",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8080",
+              "path": ["api", "test", "stats"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "📡 ANTENNES",
+      "item": [
+        {
+          "name": "Get All Antennes",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:8080/api/antennes",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8080",
+              "path": ["api", "antennes"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Antenne By ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:8080/api/antennes/1",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8080",
+              "path": ["api", "antennes", "1"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Antennes By Type",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:8080/api/antennes/type/5G",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8080",
+              "path": ["api", "antennes", "type", "5G"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Antennes GeoJSON",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:8080/api/antennes/geojson",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8080",
+              "path": ["api", "antennes", "geojson"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Coverage Area",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:8080/api/antennes/1/couverture",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8080",
+              "path": ["api", "antennes", "1", "couverture"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Antenne",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"latitude\": 33.5731,\n  \"longitude\": -7.5898,\n  \"type\": \"5G\",\n  \"puissance\": 100,\n  \"portee\": 5000,\n  \"statut\": \"active\",\n  \"date_installation\": \"2024-01-15\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:8080/api/antennes",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8080",
+              "path": ["api", "antennes"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Antenne",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"latitude\": 33.5731,\n  \"longitude\": -7.5898,\n  \"type\": \"4G/5G\",\n  \"puissance\": 150,\n  \"portee\": 6000,\n  \"statut\": \"active\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:8080/api/antennes/1",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8080",
+              "path": ["api", "antennes", "1"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Antenne",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:8080/api/antennes/1",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8080",
+              "path": ["api", "antennes", "1"]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}
