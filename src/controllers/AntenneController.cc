@@ -16,6 +16,7 @@ void AntenneController::create(const HttpRequestPtr& req, std::function<void (co
     a.coverage_radius = (*json).get("coverage_radius", 1.0).asDouble();
     a.status = (*json).get("status", "active").asString();
     a.technology = (*json).get("technology", "4G").asString();
+    a.installation_date = (*json).get("installation_date", "").asString();
     a.operator_id = (*json).get("operator_id", 0).asInt();
     a.latitude = (*json).get("latitude", 0.0).asDouble();
     a.longitude = (*json).get("longitude", 0.0).asDouble();
@@ -92,6 +93,7 @@ void AntenneController::update(const HttpRequestPtr& req, std::function<void (co
     a.coverage_radius = (*json).get("coverage_radius", 0).asDouble();
     a.status = (*json).get("status", "active").asString();
     a.technology = (*json).get("technology", "4G").asString();
+    a.installation_date = (*json).get("installation_date", "").asString(); 
     a.operator_id = (*json).get("operator_id", 0).asInt();
     a.latitude = (*json).get("latitude", 0).asDouble();
     a.longitude = (*json).get("longitude", 0).asDouble();
