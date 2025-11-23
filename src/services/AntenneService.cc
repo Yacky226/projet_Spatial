@@ -3,12 +3,13 @@
 
 #include <json/json.h>
 #include <optional>
+#include <string> // Pour std::to_string
 
 using namespace drogon;
 using namespace drogon::orm;
 
 // ============================================================================
-// 1. CREATE avec gestion d'erreurs améliorée
+// 1. CREATE
 // ============================================================================
 void AntenneService::create(const Antenna &a, std::function<void(const std::string &)> callback) {
     auto client = app().getDbClient();
@@ -40,7 +41,7 @@ void AntenneService::create(const Antenna &a, std::function<void(const std::stri
 }
 
 // ============================================================================
-// 2. READ ALL (sans pagination - compatibilité rétroactive)
+// 2. READ ALL (Non paginé)
 // ============================================================================
 void AntenneService::getAll(std::function<void(const std::vector<Antenna> &, const std::string &)> callback) {
     auto client = app().getDbClient();
@@ -65,7 +66,6 @@ void AntenneService::getAll(std::function<void(const std::vector<Antenna> &, con
                 a.latitude = row["lat"].as<double>();
                 list.push_back(a);
             }
-            
             LOG_INFO << "Retrieved " << list.size() << " antennas successfully";
             callback(list, "");
         },
@@ -78,30 +78,28 @@ void AntenneService::getAll(std::function<void(const std::vector<Antenna> &, con
 }
 
 // ============================================================================
-// 2bis. READ ALL PAGINATED (nouvelle version avec pagination)
+// 2bis. READ ALL PAGINATED
 // ============================================================================
 void AntenneService::getAllPaginated(
     int page, 
     int pageSize,
     std::function<void(const std::vector<Antenna>&, const PaginationMeta&, const std::string&)> callback) 
 {
-    auto client = app().getDbClient();
-    
-    // Validation des paramètres
     if (page < 1) page = 1;
     if (pageSize < 1) pageSize = 20;
     if (pageSize > 100) pageSize = 100;
     
     int offset = (page - 1) * pageSize;
     
-    // 1. Compter le total
+    // On capture le client pour le réutiliser
+    auto clientPtr = app().getDbClient();
     std::string countSql = "SELECT COUNT(*) as total FROM antenna";
     
-    client->execSqlAsync(
+    clientPtr->execSqlAsync(
         countSql,
-        [callback, page, pageSize, offset, client](const Result &countResult) {
+        [callback, page, pageSize, offset, clientPtr](const Result &countResult) {
             int totalItems = countResult[0]["total"].as<int>();
-            int totalPages = (totalItems + pageSize - 1) / pageSize;
+            int totalPages = totalItems > 0 ? (totalItems + pageSize - 1) / pageSize : 0;
             
             PaginationMeta meta;
             meta.currentPage = page;
@@ -111,16 +109,21 @@ void AntenneService::getAllPaginated(
             meta.hasNext = page < totalPages;
             meta.hasPrev = page > 1;
             
-            // 2. Récupérer les données paginées
+            if (totalItems == 0) {
+                callback({}, meta, "");
+                return;
+            }
+            
+            // FIX: Injection directe des entiers dans la chaîne pour éviter le bug de binding paramètre
             std::string sql =
                 "SELECT id, coverage_radius, status, technology, "
                 "installation_date::text AS installation_date, "
                 "operator_id, ST_X(geom) AS lon, ST_Y(geom) AS lat "
                 "FROM antenna "
                 "ORDER BY id "
-                "LIMIT $1 OFFSET $2";
+                "LIMIT " + std::to_string(pageSize) + " OFFSET " + std::to_string(offset);
             
-            client->execSqlAsync(
+            clientPtr->execSqlAsync(
                 sql,
                 [callback, meta](const Result &r) {
                     std::vector<Antenna> list;
@@ -137,25 +140,18 @@ void AntenneService::getAllPaginated(
                         a.latitude = row["lat"].as<double>();
                         list.push_back(a);
                     }
-                    
-                    LOG_INFO << "Page " << meta.currentPage << ": " << list.size() 
-                             << " items (total: " << meta.totalItems << ")";
-                    
                     callback(list, meta, "");
                 },
                 [callback, meta](const DrogonDbException &e) {
                     auto errorDetails = ErrorHandler::analyzePostgresError(e.base().what());
-                    ErrorHandler::logError("AntenneService::getAllPaginated", errorDetails);
+                    ErrorHandler::logError("AntenneService::getAllPaginated (data)", errorDetails);
                     callback({}, meta, errorDetails.userMessage);
-                },
-                pageSize,
-                offset
+                }
             );
         },
         [callback, page, pageSize](const DrogonDbException &e) {
             auto errorDetails = ErrorHandler::analyzePostgresError(e.base().what());
             ErrorHandler::logError("AntenneService::getAllPaginated (count)", errorDetails);
-            
             PaginationMeta emptyMeta = {page, pageSize, 0, 0, false, false};
             callback({}, emptyMeta, errorDetails.userMessage);
         }
@@ -163,7 +159,7 @@ void AntenneService::getAllPaginated(
 }
 
 // ============================================================================
-// 3. READ ONE avec gestion d'erreurs améliorée
+// 3. READ ONE
 // ============================================================================
 void AntenneService::getById(int id, std::function<void(const Antenna &, const std::string &)> callback) {
     auto client = app().getDbClient();
@@ -175,11 +171,9 @@ void AntenneService::getById(int id, std::function<void(const Antenna &, const s
         sql,
         [callback, id](const Result &r) {
             if (r.empty()) {
-                LOG_WARN << "Antenna with ID " << id << " not found";
                 callback({}, "Not Found");
                 return;
             }
-            
             Antenna a;
             auto row = r[0];
             a.id = row["id"].as<int>();
@@ -191,8 +185,6 @@ void AntenneService::getById(int id, std::function<void(const Antenna &, const s
             a.operator_id = row["operator_id"].as<int>();
             a.longitude = row["lon"].as<double>();
             a.latitude = row["lat"].as<double>();
-            
-            LOG_INFO << "Retrieved antenna ID " << id << " successfully";
             callback(a, "");
         },
         [callback](const DrogonDbException &e) { 
@@ -205,7 +197,7 @@ void AntenneService::getById(int id, std::function<void(const Antenna &, const s
 }
 
 // ============================================================================
-// 4. UPDATE avec gestion d'erreurs améliorée
+// 4. UPDATE
 // ============================================================================
 void AntenneService::update(const Antenna &a, std::function<void(const std::string &)> callback) {
     auto client = app().getDbClient();
@@ -217,10 +209,8 @@ void AntenneService::update(const Antenna &a, std::function<void(const std::stri
         sql,
         [callback, a](const Result &r) { 
             if (r.affectedRows() == 0) {
-                LOG_WARN << "Update failed: Antenna ID " << a.id << " not found";
                 callback("Not Found");
             } else {
-                LOG_INFO << "Antenna ID " << a.id << " updated successfully";
                 callback(""); 
             }
         },
@@ -241,28 +231,24 @@ void AntenneService::update(const Antenna &a, std::function<void(const std::stri
 }
 
 // ============================================================================
-// 5. DELETE avec gestion d'erreurs améliorée
+// 5. DELETE
 // ============================================================================
 void AntenneService::remove(int id, std::function<void(const std::string &)> callback) {
     auto client = app().getDbClient();
-    
     client->execSqlAsync(
         "DELETE FROM antenna WHERE id = $1",
         [callback, id](const Result &r) { 
             if (r.affectedRows() == 0) {
-                LOG_WARN << "Delete failed: Antenna ID " << id << " not found";
                 callback("Not Found");
             } else {
-                LOG_INFO << "Antenna ID " << id << " deleted successfully";
                 callback(""); 
             }
         },
         [callback](const DrogonDbException &e) { 
             auto errorDetails = ErrorHandler::analyzePostgresError(e.base().what());
             ErrorHandler::logError("AntenneService::remove", errorDetails);
-            
             if (errorDetails.type == ErrorHandler::ErrorType::FOREIGN_KEY_VIOLATION) {
-                callback("Cannot delete antenna: it is referenced by other entities (zones, reports, etc.)");
+                callback("Cannot delete antenna: it is referenced by other entities");
             } else {
                 callback(errorDetails.userMessage);
             }
@@ -272,7 +258,7 @@ void AntenneService::remove(int id, std::function<void(const std::string &)> cal
 }
 
 // ============================================================================
-// 6. SEARCH IN RADIUS (sans pagination)
+// 6. SEARCH IN RADIUS (Non paginé)
 // ============================================================================
 void AntenneService::getInRadius(double lat, double lon, double radiusMeters,
                                  std::function<void(const std::vector<Antenna> &, const std::string &)> callback) {
@@ -286,7 +272,7 @@ void AntenneService::getInRadius(double lat, double lon, double radiusMeters,
 
     client->execSqlAsync(
         sql,
-        [callback, lat, lon, radiusMeters](const Result &r) {
+        [callback](const Result &r) {
             std::vector<Antenna> list;
             for (auto row : r) {
                 Antenna a;
@@ -301,9 +287,6 @@ void AntenneService::getInRadius(double lat, double lon, double radiusMeters,
                 a.latitude = row["lat"].as<double>();
                 list.push_back(a);
             }
-            
-            LOG_INFO << "Found " << list.size() << " antennas within " << radiusMeters 
-                     << "m of (" << lat << ", " << lon << ")";
             callback(list, "");
         },
         [callback](const DrogonDbException &e) { 
@@ -323,23 +306,22 @@ void AntenneService::getInRadiusPaginated(
     int page, int pageSize,
     std::function<void(const std::vector<Antenna>&, const PaginationMeta&, const std::string&)> callback)
 {
-    auto client = app().getDbClient();
-    
     if (page < 1) page = 1;
     if (pageSize < 1) pageSize = 20;
     if (pageSize > 100) pageSize = 100;
     
     int offset = (page - 1) * pageSize;
+    auto clientPtr = app().getDbClient();
     
     std::string countSql =
         "SELECT COUNT(*) as total FROM antenna "
         "WHERE ST_DWithin(geom::geography, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography, $3)";
     
-    client->execSqlAsync(
+    clientPtr->execSqlAsync(
         countSql,
-        [callback, lat, lon, radiusMeters, page, pageSize, offset, client](const Result &countResult) {
+        [callback, lat, lon, radiusMeters, page, pageSize, offset, clientPtr](const Result &countResult) {
             int totalItems = countResult[0]["total"].as<int>();
-            int totalPages = (totalItems + pageSize - 1) / pageSize;
+            int totalPages = totalItems > 0 ? (totalItems + pageSize - 1) / pageSize : 0;
             
             PaginationMeta meta;
             meta.currentPage = page;
@@ -349,6 +331,12 @@ void AntenneService::getInRadiusPaginated(
             meta.hasNext = page < totalPages;
             meta.hasPrev = page > 1;
             
+            if (totalItems == 0) {
+                callback({}, meta, "");
+                return;
+            }
+            
+            // FIX: Injection directe LIMIT/OFFSET
             std::string sql =
                 "SELECT id, coverage_radius, status, technology, "
                 "installation_date::text AS installation_date, "
@@ -357,9 +345,9 @@ void AntenneService::getInRadiusPaginated(
                 "FROM antenna "
                 "WHERE ST_DWithin(geom::geography, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography, $3) "
                 "ORDER BY distance "
-                "LIMIT $4 OFFSET $5";
+                "LIMIT " + std::to_string(pageSize) + " OFFSET " + std::to_string(offset);
             
-            client->execSqlAsync(
+            clientPtr->execSqlAsync(
                 sql,
                 [callback, meta](const Result &r) {
                     std::vector<Antenna> list;
@@ -376,24 +364,19 @@ void AntenneService::getInRadiusPaginated(
                         a.latitude = row["lat"].as<double>();
                         list.push_back(a);
                     }
-                    
-                    LOG_INFO << "Radius search page " << meta.currentPage << ": " 
-                             << list.size() << " items (total: " << meta.totalItems << ")";
-                    
                     callback(list, meta, "");
                 },
                 [callback, meta](const DrogonDbException &e) {
                     auto errorDetails = ErrorHandler::analyzePostgresError(e.base().what());
-                    ErrorHandler::logError("AntenneService::getInRadiusPaginated", errorDetails);
+                    ErrorHandler::logError("AntenneService::getInRadiusPaginated (data)", errorDetails);
                     callback({}, meta, errorDetails.userMessage);
                 },
-                lon, lat, radiusMeters, pageSize, offset
+                lon, lat, radiusMeters
             );
         },
         [callback, page, pageSize](const DrogonDbException &e) {
             auto errorDetails = ErrorHandler::analyzePostgresError(e.base().what());
             ErrorHandler::logError("AntenneService::getInRadiusPaginated (count)", errorDetails);
-            
             PaginationMeta emptyMeta = {page, pageSize, 0, 0, false, false};
             callback({}, emptyMeta, errorDetails.userMessage);
         },
@@ -402,7 +385,7 @@ void AntenneService::getInRadiusPaginated(
 }
 
 // ============================================================================
-// 7. GET GEOJSON (sans pagination)
+// 7. GET GEOJSON (Non paginé)
 // ============================================================================
 void AntenneService::getAllGeoJSON(std::function<void(const Json::Value &, const std::string &)> callback) {
     auto client = app().getDbClient();
@@ -416,7 +399,6 @@ void AntenneService::getAllGeoJSON(std::function<void(const Json::Value &, const
             Json::Value featureCollection;
             featureCollection["type"] = "FeatureCollection";
             Json::Value features(Json::arrayValue);
-
             Json::CharReaderBuilder builder;
             std::unique_ptr<Json::CharReader> reader(builder.newCharReader());
             std::string errs;
@@ -424,7 +406,6 @@ void AntenneService::getAllGeoJSON(std::function<void(const Json::Value &, const
             for (auto row : r) {
                 Json::Value feature;
                 feature["type"] = "Feature";
-
                 Json::Value props;
                 props["id"] = row["id"].as<int>();
                 props["technology"] = row["technology"].as<std::string>();
@@ -437,20 +418,12 @@ void AntenneService::getAllGeoJSON(std::function<void(const Json::Value &, const
 
                 std::string geojsonString = row["geojson"].as<std::string>();
                 Json::Value geometryObject;
-                if (reader->parse(geojsonString.c_str(), geojsonString.c_str() + geojsonString.length(),
-                                  &geometryObject, &errs)) {
+                if (reader->parse(geojsonString.c_str(), geojsonString.c_str() + geojsonString.length(), &geometryObject, &errs)) {
                     feature["geometry"] = geometryObject;
-                } else {
-                    LOG_ERROR << "Failed to parse GeoJSON for antenna ID " << row["id"].as<int>() 
-                              << ": " << errs;
                 }
-
                 features.append(feature);
             }
-
             featureCollection["features"] = features;
-            
-            LOG_INFO << "Generated GeoJSON with " << features.size() << " features";
             callback(featureCollection, "");
         },
         [callback](const DrogonDbException &e) {
@@ -463,27 +436,25 @@ void AntenneService::getAllGeoJSON(std::function<void(const Json::Value &, const
 }
 
 // ============================================================================
-// 7bis. GET GEOJSON PAGINATED (optimisé pour Leaflet)
+// 7bis. GET GEOJSON PAGINATED
 // ============================================================================
 void AntenneService::getAllGeoJSONPaginated(
     int page, int pageSize,
     std::function<void(const Json::Value&, const PaginationMeta&, const std::string&)> callback)
 {
-    auto client = app().getDbClient();
-    
     if (page < 1) page = 1;
     if (pageSize < 1) pageSize = 20;
     if (pageSize > 100) pageSize = 100;
     
     int offset = (page - 1) * pageSize;
-    
+    auto clientPtr = app().getDbClient();
     std::string countSql = "SELECT COUNT(*) as total FROM antenna";
     
-    client->execSqlAsync(
+    clientPtr->execSqlAsync(
         countSql,
-        [callback, page, pageSize, offset, client](const Result &countResult) {
+        [callback, page, pageSize, offset, clientPtr](const Result &countResult) {
             int totalItems = countResult[0]["total"].as<int>();
-            int totalPages = (totalItems + pageSize - 1) / pageSize;
+            int totalPages = totalItems > 0 ? (totalItems + pageSize - 1) / pageSize : 0;
             
             PaginationMeta meta;
             meta.currentPage = page;
@@ -493,21 +464,29 @@ void AntenneService::getAllGeoJSONPaginated(
             meta.hasNext = page < totalPages;
             meta.hasPrev = page > 1;
             
+            if (totalItems == 0) {
+                Json::Value emptyGeoJSON;
+                emptyGeoJSON["type"] = "FeatureCollection";
+                emptyGeoJSON["features"] = Json::Value(Json::arrayValue);
+                callback(emptyGeoJSON, meta, "");
+                return;
+            }
+            
+            // FIX: Injection directe LIMIT/OFFSET
             std::string sql =
                 "SELECT id, coverage_radius, status, technology, "
                 "installation_date::text AS installation_date, "
                 "operator_id, ST_AsGeoJSON(geom) AS geojson "
                 "FROM antenna "
                 "ORDER BY id "
-                "LIMIT $1 OFFSET $2";
+                "LIMIT " + std::to_string(pageSize) + " OFFSET " + std::to_string(offset);
             
-            client->execSqlAsync(
+            clientPtr->execSqlAsync(
                 sql,
                 [callback, meta](const Result &r) {
                     Json::Value featureCollection;
                     featureCollection["type"] = "FeatureCollection";
                     Json::Value features(Json::arrayValue);
-
                     Json::CharReaderBuilder builder;
                     std::unique_ptr<Json::CharReader> reader(builder.newCharReader());
                     std::string errs;
@@ -515,7 +494,6 @@ void AntenneService::getAllGeoJSONPaginated(
                     for (auto row : r) {
                         Json::Value feature;
                         feature["type"] = "Feature";
-
                         Json::Value props;
                         props["id"] = row["id"].as<int>();
                         props["technology"] = row["technology"].as<std::string>();
@@ -528,40 +506,26 @@ void AntenneService::getAllGeoJSONPaginated(
 
                         std::string geojsonString = row["geojson"].as<std::string>();
                         Json::Value geometryObject;
-                        if (reader->parse(geojsonString.c_str(), 
-                                         geojsonString.c_str() + geojsonString.length(),
-                                         &geometryObject, &errs)) {
+                        if (reader->parse(geojsonString.c_str(), geojsonString.c_str() + geojsonString.length(), &geometryObject, &errs)) {
                             feature["geometry"] = geometryObject;
-                        } else {
-                            LOG_ERROR << "Failed to parse GeoJSON for antenna ID " 
-                                     << row["id"].as<int>() << ": " << errs;
                         }
-
                         features.append(feature);
                     }
-
                     featureCollection["features"] = features;
-                    
-                    LOG_INFO << "GeoJSON page " << meta.currentPage << ": " 
-                             << features.size() << " features (total: " << meta.totalItems << ")";
-                    
                     callback(featureCollection, meta, "");
                 },
                 [callback, meta](const DrogonDbException &e) {
                     Json::Value empty;
                     auto errorDetails = ErrorHandler::analyzePostgresError(e.base().what());
-                    ErrorHandler::logError("AntenneService::getAllGeoJSONPaginated", errorDetails);
+                    ErrorHandler::logError("AntenneService::getAllGeoJSONPaginated (data)", errorDetails);
                     callback(empty, meta, errorDetails.userMessage);
-                },
-                pageSize,
-                offset
+                }
             );
         },
         [callback, page, pageSize](const DrogonDbException &e) {
             Json::Value empty;
             auto errorDetails = ErrorHandler::analyzePostgresError(e.base().what());
             ErrorHandler::logError("AntenneService::getAllGeoJSONPaginated (count)", errorDetails);
-            
             PaginationMeta emptyMeta = {page, pageSize, 0, 0, false, false};
             callback(empty, emptyMeta, errorDetails.userMessage);
         }
@@ -569,14 +533,13 @@ void AntenneService::getAllGeoJSONPaginated(
 }
 
 // ============================================================================
-// 8. GET GEOJSON IN RADIUS (pour carte dynamique Leaflet)
+// 8. GET GEOJSON IN RADIUS
 // ============================================================================
 void AntenneService::getGeoJSONInRadius(
     double lat, double lon, double radiusMeters,
     std::function<void(const Json::Value&, const std::string&)> callback)
 {
     auto client = app().getDbClient();
-    
     std::string sql =
         "SELECT id, coverage_radius, status, technology, "
         "installation_date::text AS installation_date, "
@@ -592,7 +555,6 @@ void AntenneService::getGeoJSONInRadius(
             Json::Value featureCollection;
             featureCollection["type"] = "FeatureCollection";
             
-            // Métadonnées de la recherche
             Json::Value searchMeta;
             searchMeta["center"] = Json::Value(Json::arrayValue);
             searchMeta["center"].append(lon);
@@ -609,7 +571,6 @@ void AntenneService::getGeoJSONInRadius(
             for (auto row : r) {
                 Json::Value feature;
                 feature["type"] = "Feature";
-
                 Json::Value props;
                 props["id"] = row["id"].as<int>();
                 props["technology"] = row["technology"].as<std::string>();
@@ -623,20 +584,12 @@ void AntenneService::getGeoJSONInRadius(
 
                 std::string geojsonString = row["geojson"].as<std::string>();
                 Json::Value geometryObject;
-                if (reader->parse(geojsonString.c_str(), 
-                                 geojsonString.c_str() + geojsonString.length(),
-                                 &geometryObject, &errs)) {
+                if (reader->parse(geojsonString.c_str(), geojsonString.c_str() + geojsonString.length(), &geometryObject, &errs)) {
                     feature["geometry"] = geometryObject;
                 }
-
                 features.append(feature);
             }
-
             featureCollection["features"] = features;
-            
-            LOG_INFO << "GeoJSON radius search: " << features.size() 
-                     << " features within " << radiusMeters << "m";
-            
             callback(featureCollection, "");
         },
         [callback](const DrogonDbException &e) {
@@ -650,7 +603,7 @@ void AntenneService::getGeoJSONInRadius(
 }
 
 // ============================================================================
-// 9. GET GEOJSON IN BBOX (pour viewport Leaflet)
+// 9. GET GEOJSON IN BBOX
 // ============================================================================
 void AntenneService::getGeoJSONInBBox(
     double minLat, double minLon, double maxLat, double maxLon,
@@ -672,7 +625,6 @@ void AntenneService::getGeoJSONInBBox(
             Json::Value featureCollection;
             featureCollection["type"] = "FeatureCollection";
             
-            // Métadonnées de la bbox
             Json::Value bboxMeta;
             bboxMeta["bbox"] = Json::Value(Json::arrayValue);
             bboxMeta["bbox"].append(minLon);
@@ -690,7 +642,6 @@ void AntenneService::getGeoJSONInBBox(
             for (auto row : r) {
                 Json::Value feature;
                 feature["type"] = "Feature";
-
                 Json::Value props;
                 props["id"] = row["id"].as<int>();
                 props["technology"] = row["technology"].as<std::string>();
@@ -703,19 +654,12 @@ void AntenneService::getGeoJSONInBBox(
 
                 std::string geojsonString = row["geojson"].as<std::string>();
                 Json::Value geometryObject;
-                if (reader->parse(geojsonString.c_str(), 
-                                 geojsonString.c_str() + geojsonString.length(),
-                                 &geometryObject, &errs)) {
+                if (reader->parse(geojsonString.c_str(), geojsonString.c_str() + geojsonString.length(), &geometryObject, &errs)) {
                     feature["geometry"] = geometryObject;
                 }
-
                 features.append(feature);
             }
-
             featureCollection["features"] = features;
-            
-            LOG_INFO << "GeoJSON bbox query: " << features.size() << " features";
-            
             callback(featureCollection, "");
         },
         [callback](const DrogonDbException &e) {
@@ -729,28 +673,27 @@ void AntenneService::getGeoJSONInBBox(
 }
 
 // ============================================================================
-// 10. GET GEOJSON IN RADIUS PAGINATED (combinaison rayon + pagination)
+// 10. GET GEOJSON IN RADIUS PAGINATED
 // ============================================================================
 void AntenneService::getGeoJSONInRadiusPaginated(
     double lat, double lon, double radiusMeters,
     int page, int pageSize,
     std::function<void(const Json::Value&, const PaginationMeta&, const std::string&)> callback)
 {
-    auto client = app().getDbClient();
-    
     if (page < 1) page = 1;
     if (pageSize < 1) pageSize = 20;
     if (pageSize > 100) pageSize = 100;
     
     int offset = (page - 1) * pageSize;
+    auto clientPtr = app().getDbClient();
     
     std::string countSql =
         "SELECT COUNT(*) as total FROM antenna "
         "WHERE ST_DWithin(geom::geography, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography, $3)";
     
-    client->execSqlAsync(
+    clientPtr->execSqlAsync(
         countSql,
-        [callback, lat, lon, radiusMeters, page, pageSize, offset, client](const Result &countResult) {
+        [callback, lat, lon, radiusMeters, page, pageSize, offset, clientPtr](const Result &countResult) {
             int totalItems = countResult[0]["total"].as<int>();
             int totalPages = (totalItems + pageSize - 1) / pageSize;
             
@@ -762,6 +705,15 @@ void AntenneService::getGeoJSONInRadiusPaginated(
             meta.hasNext = page < totalPages;
             meta.hasPrev = page > 1;
             
+            if (totalItems == 0) {
+                Json::Value emptyGeoJSON;
+                emptyGeoJSON["type"] = "FeatureCollection";
+                emptyGeoJSON["features"] = Json::Value(Json::arrayValue);
+                callback(emptyGeoJSON, meta, "");
+                return;
+            }
+            
+            // FIX: Injection directe LIMIT/OFFSET
             std::string sql =
                 "SELECT id, coverage_radius, status, technology, "
                 "installation_date::text AS installation_date, "
@@ -770,9 +722,9 @@ void AntenneService::getGeoJSONInRadiusPaginated(
                 "FROM antenna "
                 "WHERE ST_DWithin(geom::geography, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography, $3) "
                 "ORDER BY distance "
-                "LIMIT $4 OFFSET $5";
+                "LIMIT " + std::to_string(pageSize) + " OFFSET " + std::to_string(offset);
             
-            client->execSqlAsync(
+            clientPtr->execSqlAsync(
                 sql,
                 [callback, meta, lat, lon, radiusMeters](const Result &r) {
                     Json::Value featureCollection;
@@ -793,7 +745,6 @@ void AntenneService::getGeoJSONInRadiusPaginated(
                     for (auto row : r) {
                         Json::Value feature;
                         feature["type"] = "Feature";
-
                         Json::Value props;
                         props["id"] = row["id"].as<int>();
                         props["technology"] = row["technology"].as<std::string>();
@@ -807,36 +758,27 @@ void AntenneService::getGeoJSONInRadiusPaginated(
 
                         std::string geojsonString = row["geojson"].as<std::string>();
                         Json::Value geometryObject;
-                        if (reader->parse(geojsonString.c_str(), 
-                                         geojsonString.c_str() + geojsonString.length(),
-                                         &geometryObject, &errs)) {
+                        if (reader->parse(geojsonString.c_str(), geojsonString.c_str() + geojsonString.length(), &geometryObject, &errs)) {
                             feature["geometry"] = geometryObject;
                         }
-
                         features.append(feature);
                     }
-
                     featureCollection["features"] = features;
-                    
-                    LOG_INFO << "GeoJSON radius search page " << meta.currentPage << ": " 
-                             << features.size() << " features (total: " << meta.totalItems << ")";
-                    
                     callback(featureCollection, meta, "");
                 },
                 [callback, meta](const DrogonDbException &e) {
                     Json::Value empty;
                     auto errorDetails = ErrorHandler::analyzePostgresError(e.base().what());
-                    ErrorHandler::logError("AntenneService::getGeoJSONInRadiusPaginated", errorDetails);
+                    ErrorHandler::logError("AntenneService::getGeoJSONInRadiusPaginated (data)", errorDetails);
                     callback(empty, meta, errorDetails.userMessage);
                 },
-                lon, lat, radiusMeters, pageSize, offset
+                lon, lat, radiusMeters
             );
         },
         [callback, page, pageSize](const DrogonDbException &e) {
             Json::Value empty;
             auto errorDetails = ErrorHandler::analyzePostgresError(e.base().what());
             ErrorHandler::logError("AntenneService::getGeoJSONInRadiusPaginated (count)", errorDetails);
-            
             PaginationMeta emptyMeta = {page, pageSize, 0, 0, false, false};
             callback(empty, emptyMeta, errorDetails.userMessage);
         },

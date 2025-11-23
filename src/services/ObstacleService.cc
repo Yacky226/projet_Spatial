@@ -1,141 +1,218 @@
 #include "ObstacleService.h"
+#include "../utils/ErrorHandler.h"
+#include <json/json.h>
+#include <string>
 
 using namespace drogon;
 using namespace drogon::orm;
 
+// ============================================================================
 // 1. CREATE
+// ============================================================================
 void ObstacleService::create(const ObstacleModel &obs, std::function<void(const std::string&)> callback) {
     auto client = app().getDbClient();
     // Insertion : On stocke le type de géométrie et la géométrie elle-même via ST_GeomFromText
     std::string sql = "INSERT INTO obstacle (type, geom_type, geom) "
-                      "VALUES ($1, $2, ST_GeomFromText($3, 4326))";
+                      "VALUES ($1, $2, ST_GeomFromText($3, 4326)) RETURNING id";
 
     client->execSqlAsync(sql, 
-        [callback](const Result &r) { callback(""); },
-        [callback](const DrogonDbException &e) { callback(e.base().what()); },
+        [callback](const Result &r) { 
+            int newId = r[0]["id"].as<int>();
+            LOG_INFO << "Obstacle created successfully with ID: " << newId;
+            callback(""); 
+        },
+        [callback](const DrogonDbException &e) { 
+            auto errorDetails = ErrorHandler::analyzePostgresError(e.base().what());
+            ErrorHandler::logError("ObstacleService::create", errorDetails);
+            callback(errorDetails.userMessage);
+        },
         obs.type, obs.geom_type, obs.wkt_geometry
     );
 }
 
-// 2. READ ALL
+// ============================================================================
+// 2. READ ALL (Non paginé)
+// ============================================================================
 void ObstacleService::getAll(std::function<void(const std::vector<ObstacleModel>&, const std::string&)> callback) {
     auto client = app().getDbClient();
     std::string sql = "SELECT id, type, geom_type, ST_AsText(geom) as wkt FROM obstacle ORDER BY id";
 
-    client->execSqlAsync(sql, [callback](const Result &r) {
-        std::vector<ObstacleModel> list;
-        for (auto row : r) {
+    client->execSqlAsync(sql, 
+        [callback](const Result &r) {
+            std::vector<ObstacleModel> list;
+            for (auto row : r) {
+                ObstacleModel o;
+                o.id = row["id"].as<int>();
+                o.type = row["type"].as<std::string>();
+                o.geom_type = row["geom_type"].as<std::string>();
+                o.wkt_geometry = row["wkt"].as<std::string>();
+                list.push_back(o);
+            }
+            LOG_INFO << "Retrieved " << list.size() << " obstacles";
+            callback(list, "");
+        },
+        [callback](const DrogonDbException &e) { 
+            auto errorDetails = ErrorHandler::analyzePostgresError(e.base().what());
+            ErrorHandler::logError("ObstacleService::getAll", errorDetails);
+            callback({}, errorDetails.userMessage); 
+        }
+    );
+}
+
+// ============================================================================
+// 3. READ ONE
+// ============================================================================
+void ObstacleService::getById(int id, std::function<void(const ObstacleModel&, const std::string&)> callback) {
+    auto client = app().getDbClient();
+    std::string sql = "SELECT id, type, geom_type, ST_AsText(geom) as wkt FROM obstacle WHERE id = $1";
+
+    client->execSqlAsync(sql, 
+        [callback, id](const Result &r) {
+            if (r.size() == 0) { 
+                LOG_WARN << "Obstacle ID " << id << " not found";
+                callback({}, "Not Found"); 
+                return; 
+            }
+            auto row = r[0];
             ObstacleModel o;
             o.id = row["id"].as<int>();
             o.type = row["type"].as<std::string>();
             o.geom_type = row["geom_type"].as<std::string>();
             o.wkt_geometry = row["wkt"].as<std::string>();
-            list.push_back(o);
-        }
-        callback(list, "");
-    },
-    [callback](const DrogonDbException &e) { callback({}, e.base().what()); });
+            callback(o, "");
+        },
+        [callback](const DrogonDbException &e) { 
+            auto errorDetails = ErrorHandler::analyzePostgresError(e.base().what());
+            ErrorHandler::logError("ObstacleService::getById", errorDetails);
+            callback({}, errorDetails.userMessage); 
+        }, 
+        id
+    );
 }
 
-// 3. READ ONE
-void ObstacleService::getById(int id, std::function<void(const ObstacleModel&, const std::string&)> callback) {
-    auto client = app().getDbClient();
-    std::string sql = "SELECT id, type, geom_type, ST_AsText(geom) as wkt FROM obstacle WHERE id = $1";
-
-    client->execSqlAsync(sql, [callback](const Result &r) {
-        if (r.size() == 0) { callback({}, "Not Found"); return; }
-        auto row = r[0];
-        ObstacleModel o;
-        o.id = row["id"].as<int>();
-        o.type = row["type"].as<std::string>();
-        o.geom_type = row["geom_type"].as<std::string>();
-        o.wkt_geometry = row["wkt"].as<std::string>();
-        callback(o, "");
-    },
-    [callback](const DrogonDbException &e) { callback({}, e.base().what()); }, id);
-}
-
+// ============================================================================
 // 4. UPDATE
+// ============================================================================
 void ObstacleService::update(const ObstacleModel &obs, std::function<void(const std::string&)> callback) {
     auto client = app().getDbClient();
     std::string sql = "UPDATE obstacle SET type=$1, geom_type=$2, geom=ST_GeomFromText($3, 4326) WHERE id=$4";
 
     client->execSqlAsync(sql, 
-        [callback](const Result &r) { callback(""); },
-        [callback](const DrogonDbException &e) { callback(e.base().what()); },
+        [callback, obs](const Result &r) { 
+            if (r.affectedRows() == 0) {
+                LOG_WARN << "Update failed: Obstacle ID " << obs.id << " not found";
+                callback("Not Found");
+            } else {
+                LOG_INFO << "Obstacle ID " << obs.id << " updated";
+                callback(""); 
+            }
+        },
+        [callback](const DrogonDbException &e) { 
+            auto errorDetails = ErrorHandler::analyzePostgresError(e.base().what());
+            ErrorHandler::logError("ObstacleService::update", errorDetails);
+            callback(errorDetails.userMessage); 
+        },
         obs.type, obs.geom_type, obs.wkt_geometry, obs.id
     );
 }
 
+// ============================================================================
 // 5. DELETE
+// ============================================================================
 void ObstacleService::remove(int id, std::function<void(const std::string&)> callback) {
     auto client = app().getDbClient();
     client->execSqlAsync("DELETE FROM obstacle WHERE id = $1",
-        [callback](const Result &r) { callback(""); },
-        [callback](const DrogonDbException &e) { callback(e.base().what()); },
+        [callback, id](const Result &r) { 
+            if (r.affectedRows() == 0) {
+                callback("Not Found");
+            } else {
+                LOG_INFO << "Obstacle ID " << id << " deleted";
+                callback(""); 
+            }
+        },
+        [callback](const DrogonDbException &e) { 
+            auto errorDetails = ErrorHandler::analyzePostgresError(e.base().what());
+            ErrorHandler::logError("ObstacleService::remove", errorDetails);
+            callback(errorDetails.userMessage); 
+        },
         id
     );
-
 }
 
- void ObstacleService::getAllGeoJSON(std::function<void(const Json::Value&, const std::string&)> callback) {
+// ============================================================================
+// 6. GET GEOJSON (Non paginé)
+// ============================================================================
+void ObstacleService::getAllGeoJSON(std::function<void(const Json::Value&, const std::string&)> callback) {
     auto client = app().getDbClient();
 
     // On récupère le type d'obstacle et sa géométrie au format GeoJSON
-    std::string sql = "SELECT id, type, geom_type, ST_AsGeoJSON(geom) as geojson FROM obstacle";
+    std::string sql = "SELECT id, type, geom_type, ST_AsGeoJSON(geom) as geojson FROM obstacle ORDER BY id";
 
-    client->execSqlAsync(sql, [callback](const Result &r) {
-        Json::Value featureCollection;
-        featureCollection["type"] = "FeatureCollection";
-        Json::Value features(Json::arrayValue);
+    client->execSqlAsync(sql, 
+        [callback](const Result &r) {
+            Json::Value featureCollection;
+            featureCollection["type"] = "FeatureCollection";
+            Json::Value features(Json::arrayValue);
 
-        Json::CharReaderBuilder builder;
-        std::unique_ptr<Json::CharReader> reader(builder.newCharReader());
-        std::string errs;
+            Json::CharReaderBuilder builder;
+            std::unique_ptr<Json::CharReader> reader(builder.newCharReader());
+            std::string errs;
 
-        for (auto row : r) {
-            Json::Value feature;
-            feature["type"] = "Feature";
+            for (auto row : r) {
+                Json::Value feature;
+                feature["type"] = "Feature";
 
-            // Propriétés (Type de bâtiment, hauteur, etc.)
-            Json::Value props;
-            props["id"] = row["id"].as<int>();
-            props["type"] = row["type"].as<std::string>();         // ex: 'batiment'
-            props["geom_type"] = row["geom_type"].as<std::string>(); // ex: 'POLYGON'
-            feature["properties"] = props;
+                // Propriétés
+                Json::Value props;
+                props["id"] = row["id"].as<int>();
+                props["type"] = row["type"].as<std::string>();
+                props["geom_type"] = row["geom_type"].as<std::string>();
+                feature["properties"] = props;
 
-            // Parsing de la géométrie GeoJSON brute
-            std::string geoString = row["geojson"].as<std::string>();
-            Json::Value geomObj;
-            if(reader->parse(geoString.c_str(), geoString.c_str() + geoString.length(), &geomObj, &errs)){
-                feature["geometry"] = geomObj;
+                // Parsing de la géométrie GeoJSON brute
+                std::string geoString = row["geojson"].as<std::string>();
+                Json::Value geomObj;
+                if(reader->parse(geoString.c_str(), geoString.c_str() + geoString.length(), &geomObj, &errs)){
+                    feature["geometry"] = geomObj;
+                }
+                features.append(feature);
             }
-            features.append(feature);
+            featureCollection["features"] = features;
+            
+            LOG_INFO << "Generated GeoJSON for " << features.size() << " obstacles";
+            callback(featureCollection, "");
+        },
+        [callback](const DrogonDbException &e) { 
+            Json::Value empty; 
+            auto errorDetails = ErrorHandler::analyzePostgresError(e.base().what());
+            ErrorHandler::logError("ObstacleService::getAllGeoJSON", errorDetails);
+            callback(empty, errorDetails.userMessage); 
         }
-        featureCollection["features"] = features;
-        callback(featureCollection, "");
-    },
-    [callback](const DrogonDbException &e) { 
-        Json::Value empty; 
-        callback(empty, e.base().what()); 
-    });
+    );
 }
 
-// 6. READ ALL PAGINATED
+// ============================================================================
+// 7. READ ALL PAGINATED (FIXED)
+// ============================================================================
 void ObstacleService::getAllPaginated(
     int page, 
     int pageSize,
     std::function<void(const std::vector<ObstacleModel>&, const PaginationMeta&, const std::string&)> callback
 ) {
-    auto client = app().getDbClient();
+    if (page < 1) page = 1;
+    if (pageSize < 1) pageSize = 20;
+    if (pageSize > 100) pageSize = 100;
+
+    int offset = (page - 1) * pageSize;
     
-    // Requête pour compter le total
-    client->execSqlAsync(
+    // Capture du client pour réutilisation
+    auto clientPtr = app().getDbClient();
+    
+    clientPtr->execSqlAsync(
         "SELECT COUNT(*) FROM obstacle",
-        [callback, page, pageSize, client](const Result& r) {
+        [callback, page, pageSize, offset, clientPtr](const Result& r) {
             int totalItems = r[0][0].as<int>();
             int totalPages = (totalItems + pageSize - 1) / pageSize;
-            int offset = (page - 1) * pageSize;
             
             PaginationMeta meta;
             meta.currentPage = page;
@@ -145,9 +222,17 @@ void ObstacleService::getAllPaginated(
             meta.hasNext = page < totalPages;
             meta.hasPrev = page > 1;
             
-            // Requête paginée
-            std::string sql = "SELECT id, type, geom_type, ST_AsText(geom) as wkt FROM obstacle ORDER BY id LIMIT $1 OFFSET $2";
-            client->execSqlAsync(
+            if (totalItems == 0) {
+                callback({}, meta, "");
+                return;
+            }
+            
+            // Injection directe pour éviter le bug du driver
+            std::string sql = "SELECT id, type, geom_type, ST_AsText(geom) as wkt "
+                              "FROM obstacle ORDER BY id LIMIT " + std::to_string(pageSize) + 
+                              " OFFSET " + std::to_string(offset);
+
+            clientPtr->execSqlAsync(
                 sql,
                 [callback, meta](const Result& r) {
                     std::vector<ObstacleModel> list;
@@ -162,33 +247,43 @@ void ObstacleService::getAllPaginated(
                     callback(list, meta, "");
                 },
                 [callback, meta](const DrogonDbException& e) {
-                    callback({}, meta, e.base().what());
-                },
-                pageSize,
-                offset
+                    auto errorDetails = ErrorHandler::analyzePostgresError(e.base().what());
+                    ErrorHandler::logError("ObstacleService::getAllPaginated (data)", errorDetails);
+                    callback({}, meta, errorDetails.userMessage);
+                }
             );
         },
-        [callback](const DrogonDbException& e) {
-            PaginationMeta emptyMeta{};
-            callback({}, emptyMeta, e.base().what());
+        [callback, page, pageSize](const DrogonDbException& e) {
+            PaginationMeta emptyMeta = {page, pageSize, 0, 0, false, false};
+            auto errorDetails = ErrorHandler::analyzePostgresError(e.base().what());
+            ErrorHandler::logError("ObstacleService::getAllPaginated (count)", errorDetails);
+            callback({}, emptyMeta, errorDetails.userMessage);
         }
     );
 }
 
-// 7. GET ALL GEOJSON PAGINATED
+// ============================================================================
+// 8. GET ALL GEOJSON PAGINATED (FIXED)
+// ============================================================================
 void ObstacleService::getAllGeoJSONPaginated(
     int page,
     int pageSize,
     std::function<void(const Json::Value&, const PaginationMeta&, const std::string&)> callback
 ) {
-    auto client = app().getDbClient();
+    if (page < 1) page = 1;
+    if (pageSize < 1) pageSize = 20;
+    if (pageSize > 100) pageSize = 100;
+
+    int offset = (page - 1) * pageSize;
     
-    client->execSqlAsync(
+    // Capture du client pour réutilisation
+    auto clientPtr = app().getDbClient();
+    
+    clientPtr->execSqlAsync(
         "SELECT COUNT(*) FROM obstacle",
-        [callback, page, pageSize, client](const Result& r) {
+        [callback, page, pageSize, offset, clientPtr](const Result& r) {
             int totalItems = r[0][0].as<int>();
             int totalPages = (totalItems + pageSize - 1) / pageSize;
-            int offset = (page - 1) * pageSize;
             
             PaginationMeta meta;
             meta.currentPage = page;
@@ -198,8 +293,20 @@ void ObstacleService::getAllGeoJSONPaginated(
             meta.hasNext = page < totalPages;
             meta.hasPrev = page > 1;
             
-            std::string sql = "SELECT id, type, geom_type, ST_AsGeoJSON(geom) as geojson FROM obstacle ORDER BY id LIMIT $1 OFFSET $2";
-            client->execSqlAsync(
+            if (totalItems == 0) {
+                Json::Value emptyGeoJSON;
+                emptyGeoJSON["type"] = "FeatureCollection";
+                emptyGeoJSON["features"] = Json::Value(Json::arrayValue);
+                callback(emptyGeoJSON, meta, "");
+                return;
+            }
+            
+            // Injection directe pour éviter le bug du driver
+            std::string sql = "SELECT id, type, geom_type, ST_AsGeoJSON(geom) as geojson "
+                              "FROM obstacle ORDER BY id LIMIT " + std::to_string(pageSize) + 
+                              " OFFSET " + std::to_string(offset);
+
+            clientPtr->execSqlAsync(
                 sql,
                 [callback, meta](const Result& r) {
                     Json::Value featureCollection;
@@ -232,16 +339,18 @@ void ObstacleService::getAllGeoJSONPaginated(
                 },
                 [callback, meta](const DrogonDbException& e) {
                     Json::Value empty;
-                    callback(empty, meta, e.base().what());
-                },
-                pageSize,
-                offset
+                    auto errorDetails = ErrorHandler::analyzePostgresError(e.base().what());
+                    ErrorHandler::logError("ObstacleService::getAllGeoJSONPaginated (data)", errorDetails);
+                    callback(empty, meta, errorDetails.userMessage);
+                }
             );
         },
-        [callback](const DrogonDbException& e) {
+        [callback, page, pageSize](const DrogonDbException& e) {
             Json::Value empty;
-            PaginationMeta emptyMeta{};
-            callback(empty, emptyMeta, e.base().what());
+            PaginationMeta emptyMeta = {page, pageSize, 0, 0, false, false};
+            auto errorDetails = ErrorHandler::analyzePostgresError(e.base().what());
+            ErrorHandler::logError("ObstacleService::getAllGeoJSONPaginated (count)", errorDetails);
+            callback(empty, emptyMeta, errorDetails.userMessage);
         }
     );
 }
