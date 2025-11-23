@@ -1,7 +1,14 @@
 ﻿{
   "app": {
     "number_of_threads": 1,
-    "log": { "log_level": "DEBUG" }
+    "log": { "log_level": "DEBUG" },
+    "filters": [
+      {
+        "name": "CorsFilter",
+        "paths": ["/"],
+        "excluded_paths": []
+      }
+    ]
   },
   "listeners": [
     {

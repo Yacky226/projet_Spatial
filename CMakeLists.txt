@@ -12,6 +12,8 @@ include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/src/models
     ${CMAKE_CURRENT_SOURCE_DIR}/src/services
     ${CMAKE_CURRENT_SOURCE_DIR}/src/controllers
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/utils
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/filters
    
 )
 

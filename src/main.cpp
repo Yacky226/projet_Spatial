@@ -2,14 +2,18 @@
 #include <iostream>
 
 int main() {
-    // 1. Désactiver le buffering pour que Docker voie les logs tout de suite
     setbuf(stdout, NULL);
     std::cout << ">>> Démarrage de l'application..." << std::endl;
 
-    // 2. Charger la config
     drogon::app().loadConfigFile("../config/config.json");
+
+    // Ajout global des headers CORS pour les réponses standards
+    drogon::app().registerPostHandlingAdvice([](const drogon::HttpRequestPtr &, const drogon::HttpResponsePtr &resp) {
+        resp->addHeader("Access-Control-Allow-Origin", "*");
+        resp->addHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+        resp->addHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With");
+    });
     
-    // 3. Lancer le serveur
     drogon::app().run();
     return 0;
 }
