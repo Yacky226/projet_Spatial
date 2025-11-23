@@ -1,512 +1,831 @@
-Collecting workspace information# 📡 API Optimisation Couverture Réseau 4G/5G (Maroc)
+# API Antennes 5G - Documentation Complète
 
-## 📋 Vue d'ensemble
+## 📋 Table des matières
 
-API REST haute performance développée en **C++17** avec le framework **Drogon** pour la gestion et l'optimisation des réseaux de télécommunications au Maroc. L'application utilise **PostgreSQL avec PostGIS** pour le traitement avancé des données géospatiales.
+1. Vue d'ensemble
+2. Architecture
+3. Modèles de données
+4. Endpoints API
+5. Pagination
+6. Validation
+7. Gestion des erreurs
+8. Installation
+9. Exemples d'utilisation
+
+---
+
+## 🎯 Vue d'ensemble
+
+API REST pour la gestion et la visualisation d'antennes 5G avec support PostGIS pour les fonctionnalités géospatiales.
+
+### Fonctionnalités principales
+
+- ✅ CRUD complet pour antennes, obstacles, zones et opérateurs
+- ✅ Recherche géographique (rayon, bounding box)
+- ✅ Export GeoJSON pour intégration Leaflet/Mapbox
+- ✅ Pagination optimisée
+- ✅ Validation complète des données
+- ✅ Gestion avancée des erreurs PostgreSQL
+- ✅ Support PostGIS pour géométries complexes
+
+---
 
 ## 🏗️ Architecture
 
 ```
-antennes-5g/
-├── config/
-│   └── config.json              # Configuration de la base de données
-├── src/
-│   ├── main.cpp                 # Point d'entrée de l'application
-│   ├── controllers/             # Contrôleurs REST (endpoints HTTP)
-│   │   ├── AntenneController    # Gestion des antennes
-│   │   ├── OperatorController   # Gestion des opérateurs
-│   │   ├── ZoneController       # Gestion des zones géographiques
-│   │   ├── ObstacleController   # Gestion des obstacles
-│   │   ├── AntennaZoneController    # Relations antennes-zones
-│   │   └── ZoneObstacleController   # Relations zones-obstacles
-│   ├── services/                # Logique métier et requêtes SQL
-│   │   ├── AntenneService
-│   │   ├── OperatorService
-│   │   ├── ZoneService
-│   │   ├── ObstacleService
-│   │   ├── AntennaZoneService
-│   │   └── ZoneObstacleService
-│   └── models/                  # Structures de données
-│       ├── Antenne.h
-│       ├── Operator.h
-│       ├── Zone.h
-│       └── Obstacle.h
-├── tests/
-│   └── postman_collection.json  # Collection de tests Postman
-├── scripts/
-│   └── init.sql                 # Script d'initialisation de la DB
-├── CMakeLists.txt               # Configuration de compilation
-├── Dockerfile                   # Image Docker Ubuntu + Drogon
-├── docker-compose.yml           # Orchestration des services
-├── setup.bat                    # Script de démarrage Windows (Batch)
-├── setup.ps1                    # Script de démarrage Windows (PowerShell)
-└── quick-start.bat              # Démarrage rapide
+src/
+├── controllers/        # Gestion des requêtes HTTP
+│   ├── AntenneController.cc
+│   ├── ObstacleController.cc
+│   ├── ZoneController.cc
+│   ├── OperatorController.cc
+│   ├── AntennaZoneController.cc
+│   └── ZoneObstacleController.cc
+│
+├── services/          # Logique métier et accès DB
+│   ├── AntenneService.cc
+│   ├── ObstacleService.cc
+│   ├── ZoneService.cc
+│   ├── OperatorService.cc
+│   ├── AntennaZoneService.cc
+│   └── ZoneObstacleService.cc
+│
+├── models/           # Structures de données
+│   ├── Antenne.h
+│   ├── Obstacle.h
+│   ├── Zone.h
+│   └── Operator.h
+│
+└── utils/            # Utilitaires
+    ├── Validator.h
+    ├── ErrorHandler.h
+    ├── PaginationHelper.h
+    └── PaginationMeta.h
 ```
 
-## 🛠 Stack Technique
+---
 
-| Composant             | Technologie                           |
-| --------------------- | ------------------------------------- |
-| **Langage**           | C++17                                 |
-| **Framework Web**     | Drogon (Asynchrone, Non-blocking I/O) |
-| **Base de données**   | PostgreSQL 14+                        |
-| **Extension SIG**     | PostGIS 3.x                           |
-| **Conteneurisation**  | Docker & Docker Compose               |
-| **Build System**      | CMake 3.14+                           |
-| **Format de données** | JSON, GeoJSON (RFC 7946)              |
+## 📊 Modèles de données
 
-## 📡 Fonctionnalités Complètes
+### Antenne (Antenna)
 
-### 1. 📶 Gestion des Antennes (`/api/antennes`)
+```cpp
+struct Antenna {
+    int id;
+    double latitude;           // -90 à +90
+    double longitude;          // -180 à +180
+    double coverage_radius;    // En mètres (max 50000m)
+    std::string status;        // active, inactive, maintenance, planned
+    std::string technology;    // 4G, 5G, 5G-SA, 5G-NSA
+    std::string installation_date;  // Format ISO 8601
+    int operator_id;
+};
+```
 
-#### Opérations CRUD
+### Obstacle
 
-| Méthode  | Endpoint             | Description                      |
-| -------- | -------------------- | -------------------------------- |
-| `GET`    | `/api/antennes`      | Liste toutes les antennes        |
-| `GET`    | `/api/antennes/{id}` | Détails d'une antenne spécifique |
-| `POST`   | `/api/antennes`      | Créer une nouvelle antenne       |
-| `PUT`    | `/api/antennes/{id}` | Mettre à jour une antenne        |
-| `DELETE` | `/api/antennes/{id}` | Supprimer une antenne            |
+```cpp
+struct ObstacleModel {
+    int id;
+    std::string type;          // batiment, vegetation, relief
+    std::string geom_type;     // POINT, POLYGON, LINESTRING
+    std::string wkt_geometry;  // Format WKT (Well-Known Text)
+};
+```
 
-#### Fonctionnalités Géospatiales
+### Zone
 
-| Méthode | Endpoint                                                   | Description                                  |
-| ------- | ---------------------------------------------------------- | -------------------------------------------- |
-| `GET`   | `/api/antennes/geojson`                                    | Export GeoJSON (compatible Leaflet/MapBox)   |
-| `GET`   | `/api/antennes/search?lat={lat}&lon={lon}&radius={meters}` | Recherche dans un rayon (PostGIS ST_DWithin) |
+```cpp
+struct Zone {
+    int id;
+    std::string name;
+    std::string wkt_geometry;  // POLYGON en WKT
+    double area;               // Calculé automatiquement (m²)
+};
+```
 
-#### Modèle de Données
+### Operator
+
+```cpp
+struct Operator {
+    int id;
+    std::string name;
+    std::string contact_email;
+    std::string contact_phone;
+};
+```
+
+---
+
+## 🔌 Endpoints API
+
+### 📡 Antennes
+
+#### **POST** `/api/antennes`
+
+Créer une nouvelle antenne.
+
+**Body:**
 
 ```json
 {
-  "id": 1,
-  "coverage_radius": 5000.0,
+  "latitude": 48.8566,
+  "longitude": 2.3522,
+  "coverage_radius": 5000,
   "status": "active",
   "technology": "5G",
   "installation_date": "2024-01-15",
-  "operator_id": 1,
-  "latitude": 33.5731,
-  "longitude": -7.5898
+  "operator_id": 1
 }
 ```
 
-**Types Enum:**
+**Validations:**
 
-- `status`: `active`, `inactive`, `maintenance`
-- `technology`: `2G`, `3G`, `4G`, `5G`
+- Latitude: -90 à +90
+- Longitude: -180 à +180
+- Coverage radius: > 0 et ≤ 50000m
+- Status: `active`, `inactive`, `maintenance`, `planned`
+- Technology: `4G`, `5G`, `5G-SA`, `5G-NSA`
 
-### 2. 🏢 Gestion des Opérateurs (`/api/operators`)
-
-| Méthode  | Endpoint              | Description                |
-| -------- | --------------------- | -------------------------- |
-| `GET`    | `/api/operators`      | Liste tous les opérateurs  |
-| `GET`    | `/api/operators/{id}` | Détails d'un opérateur     |
-| `POST`   | `/api/operators`      | Créer un opérateur         |
-| `PUT`    | `/api/operators/{id}` | Mettre à jour un opérateur |
-| `DELETE` | `/api/operators/{id}` | Supprimer un opérateur     |
-
-#### Modèle de Données
+**Response (201):**
 
 ```json
 {
-  "id": 1,
-  "name": "Maroc Telecom"
+  "success": true,
+  "message": "Antenna created successfully",
+  "timestamp": "2024-11-23T10:30:00Z"
 }
 ```
 
-**Exemples d'opérateurs:**
+---
 
-- Maroc Telecom
-- Orange Maroc
-- Inwi
+#### **GET** `/api/antennes`
 
-### 3. 🗺️ Gestion des Zones (`/api/zones`)
+Lister toutes les antennes (avec pagination optionnelle).
 
-#### Opérations CRUD
+**Query params:**
 
-| Méthode  | Endpoint             | Description              |
-| -------- | -------------------- | ------------------------ |
-| `GET`    | `/api/zones`         | Liste toutes les zones   |
-| `GET`    | `/api/zones/{id}`    | Détails d'une zone       |
-| `POST`   | `/api/zones`         | Créer une zone           |
-| `PUT`    | `/api/zones/{id}`    | Mettre à jour une zone   |
-| `DELETE` | `/api/zones/{id}`    | Supprimer une zone       |
-| `GET`    | `/api/zones/geojson` | Export GeoJSON des zones |
+- `page` (optionnel): Numéro de page (défaut: 1)
+- `pageSize` (optionnel): Éléments par page (défaut: 20, max: 100)
 
-#### Modèle de Données
+**Response sans pagination:**
 
 ```json
 {
-  "id": 1,
-  "name": "Casablanca Centre",
-  "type": "country",
-  "density": 1500.0,
-  "wkt": "POLYGON((-7.6 33.57, -7.58 33.57, -7.58 33.59, -7.6 33.59, -7.6 33.57))",
-  "parent_id": 0
+  "success": true,
+  "data": [
+    {
+      "id": 1,
+      "latitude": 48.8566,
+      "longitude": 2.3522,
+      "coverage_radius": 5000,
+      "status": "active",
+      "technology": "5G",
+      "installation_date": "2024-01-15",
+      "operator_id": 1
+    }
+  ],
+  "count": 1,
+  "timestamp": "2024-11-23T10:30:00Z"
 }
 ```
 
-**Types de zones:**
-
-- `country`: Pays
-- `region`: Région administrative
-- `province`: Province
-- `coverage`: Zone de couverture
-- `white_zone`: Zone blanche (sans couverture)
-
-**Hiérarchie:** Les zones peuvent avoir des relations parent-enfant (ex: Région → Province).
-
-### 4. 🏔️ Gestion des Obstacles (`/api/obstacles`)
-
-| Méthode  | Endpoint                 | Description                  |
-| -------- | ------------------------ | ---------------------------- |
-| `GET`    | `/api/obstacles`         | Liste tous les obstacles     |
-| `GET`    | `/api/obstacles/{id}`    | Détails d'un obstacle        |
-| `POST`   | `/api/obstacles`         | Créer un obstacle            |
-| `PUT`    | `/api/obstacles/{id}`    | Mettre à jour un obstacle    |
-| `DELETE` | `/api/obstacles/{id}`    | Supprimer un obstacle        |
-| `GET`    | `/api/obstacles/geojson` | Export GeoJSON des obstacles |
-
-#### Modèle de Données
+**Response avec pagination:**
 
 ```json
 {
-  "id": 1,
+  "success": true,
+  "data": [...],
+  "pagination": {
+    "currentPage": 1,
+    "pageSize": 20,
+    "totalItems": 150,
+    "totalPages": 8,
+    "hasNext": true,
+    "hasPrev": false,
+    "links": {
+      "self": "/api/antennes?pageSize=20&page=1",
+      "first": "/api/antennes?pageSize=20&page=1",
+      "last": "/api/antennes?pageSize=20&page=8",
+      "next": "/api/antennes?pageSize=20&page=2"
+    }
+  },
+  "timestamp": "2024-11-23T10:30:00Z"
+}
+```
+
+---
+
+#### **GET** `/api/antennes/{id}`
+
+Obtenir une antenne par ID.
+
+**Response (200):**
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": 1,
+    "latitude": 48.8566,
+    "longitude": 2.3522,
+    "coverage_radius": 5000,
+    "status": "active",
+    "technology": "5G",
+    "installation_date": "2024-01-15",
+    "operator_id": 1
+  },
+  "timestamp": "2024-11-23T10:30:00Z"
+}
+```
+
+---
+
+#### **PUT** `/api/antennes/{id}`
+
+Mettre à jour une antenne.
+
+**Body (champs optionnels):**
+
+```json
+{
+  "status": "maintenance",
+  "coverage_radius": 6000
+}
+```
+
+**Response (200):**
+
+```json
+{
+  "success": true,
+  "message": "Antenna updated successfully",
+  "antennaId": 1,
+  "timestamp": "2024-11-23T10:30:00Z"
+}
+```
+
+---
+
+#### **DELETE** `/api/antennes/{id}`
+
+Supprimer une antenne.
+
+**Response (204 No Content)**
+
+---
+
+#### **GET** `/api/antennes/search/radius`
+
+Rechercher des antennes dans un rayon.
+
+**Query params:**
+
+- `lat`: Latitude du centre
+- `lon`: Longitude du centre
+- `radius`: Rayon en mètres
+- `page` (optionnel): Pagination
+- `pageSize` (optionnel): Pagination
+
+**Exemple:**
+
+```
+GET /api/antennes/search/radius?lat=48.8566&lon=2.3522&radius=10000
+```
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "data": [...],
+  "count": 5,
+  "timestamp": "2024-11-23T10:30:00Z"
+}
+```
+
+---
+
+#### **GET** `/api/antennes/geojson`
+
+Export GeoJSON de toutes les antennes.
+
+**Query params:**
+
+- `page` (optionnel)
+- `pageSize` (optionnel)
+
+**Response:**
+
+```json
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [2.3522, 48.8566]
+      },
+      "properties": {
+        "id": 1,
+        "status": "active",
+        "technology": "5G",
+        "coverage_radius": 5000,
+        "operator_id": 1
+      }
+    }
+  ]
+}
+```
+
+---
+
+#### **GET** `/api/antennes/geojson/radius`
+
+GeoJSON des antennes dans un rayon.
+
+**Query params:**
+
+- `lat`, `lon`, `radius`
+- `page`, `pageSize` (optionnels)
+
+---
+
+#### **GET** `/api/antennes/geojson/bbox`
+
+GeoJSON des antennes dans une bounding box.
+
+**Query params:**
+
+- `minLat`: Latitude minimale
+- `minLon`: Longitude minimale
+- `maxLat`: Latitude maximale
+- `maxLon`: Longitude maximale
+
+**Exemple:**
+
+```
+GET /api/antennes/geojson/bbox?minLat=48.8&minLon=2.3&maxLat=48.9&maxLon=2.4
+```
+
+---
+
+### 🏢 Obstacles
+
+#### **POST** `/api/obstacles`
+
+Créer un obstacle.
+
+**Body:**
+
+```json
+{
   "type": "batiment",
   "geom_type": "POLYGON",
-  "wkt": "POLYGON((-7.59 33.58, -7.588 33.58, -7.588 33.582, -7.59 33.582, -7.59 33.58))"
+  "wkt": "POLYGON((2.35 48.85, 2.36 48.85, 2.36 48.86, 2.35 48.86, 2.35 48.85))"
 }
 ```
 
-**Types d'obstacles:**
+**Validations:**
 
-- `batiment`: Bâtiments
-- `foret`: Forêts
-- `montagne`: Montagnes
-- `eau`: Plans d'eau
+- Type: `batiment`, `vegetation`, `relief`
+- Geom type: `POINT`, `POLYGON`, `LINESTRING`
+- WKT: Format valide
 
-**Géométries supportées:**
+---
 
-- `POINT`: Points isolés
-- `LINESTRING`: Lignes (routes, rivières)
-- `POLYGON`: Surfaces (bâtiments, zones boisées)
+#### **GET** `/api/obstacles`
 
-### 5. 🔗 Relations Antennes-Zones (`/antenna-zone/*`)
+Lister tous les obstacles (pagination supportée).
 
-| Méthode | Endpoint                      | Description                     |
-| ------- | ----------------------------- | ------------------------------- |
-| `POST`  | `/antenna-zone/link`          | Lier une antenne à une zone     |
-| `POST`  | `/antenna-zone/unlink`        | Délier une antenne d'une zone   |
-| `GET`   | `/antenna/{antenna_id}/zones` | Zones couvertes par une antenne |
-| `GET`   | `/zone/{zone_id}/antennas`    | Antennes dans une zone          |
-| `GET`   | `/antenna-zone/all`           | Toutes les relations            |
+---
 
-#### Exemples de Requêtes
+#### **GET** `/api/obstacles/{id}`
 
-**Créer un lien:**
+Obtenir un obstacle par ID.
+
+---
+
+#### **PUT** `/api/obstacles/{id}`
+
+Mettre à jour un obstacle.
+
+---
+
+#### **DELETE** `/api/obstacles/{id}`
+
+Supprimer un obstacle.
+
+---
+
+#### **GET** `/api/obstacles/geojson`
+
+Export GeoJSON des obstacles (pagination supportée).
+
+**Response:**
 
 ```json
-POST /antenna-zone/link
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[2.35, 48.85], [2.36, 48.85], ...]]
+      },
+      "properties": {
+        "id": 1,
+        "type": "batiment",
+        "geom_type": "POLYGON"
+      }
+    }
+  ]
+}
+```
+
+---
+
+### 🗺️ Zones
+
+#### **POST** `/api/zones`
+
+Créer une zone géographique.
+
+**Body:**
+
+```json
+{
+  "name": "Zone Centre Paris",
+  "wkt": "POLYGON((2.33 48.86, 2.34 48.86, 2.34 48.87, 2.33 48.87, 2.33 48.86))"
+}
+```
+
+---
+
+#### **GET** `/api/zones`
+
+Lister toutes les zones (pagination supportée).
+
+---
+
+#### **GET** `/api/zones/{id}`
+
+Obtenir une zone par ID.
+
+---
+
+#### **PUT** `/api/zones/{id}`
+
+Mettre à jour une zone.
+
+---
+
+#### **DELETE** `/api/zones/{id}`
+
+Supprimer une zone.
+
+---
+
+#### **GET** `/api/zones/geojson`
+
+Export GeoJSON des zones (pagination supportée).
+
+---
+
+### 📞 Opérateurs
+
+#### **POST** `/api/operators`
+
+Créer un opérateur.
+
+**Body:**
+
+```json
+{
+  "name": "Orange",
+  "contact_email": "contact@orange.fr",
+  "contact_phone": "+33123456789"
+}
+```
+
+---
+
+#### **GET** `/api/operators`
+
+Lister tous les opérateurs (pagination supportée).
+
+---
+
+#### **GET** `/api/operators/{id}`
+
+Obtenir un opérateur par ID.
+
+---
+
+#### **PUT** `/api/operators/{id}`
+
+Mettre à jour un opérateur.
+
+---
+
+#### **DELETE** `/api/operators/{id}`
+
+Supprimer un opérateur.
+
+---
+
+### 🔗 Relations
+
+#### **POST** `/api/antenna-zones`
+
+Associer une antenne à une zone.
+
+**Body:**
+
+```json
 {
   "antenna_id": 1,
-  "zone_id": 5
+  "zone_id": 2
 }
 ```
 
-**Réponse:**
+---
+
+#### **GET** `/api/antenna-zones`
+
+Lister toutes les associations antenne-zone.
+
+---
+
+#### **DELETE** `/api/antenna-zones/{antenna_id}/{zone_id}`
+
+Supprimer une association.
+
+---
+
+#### **POST** `/api/zone-obstacles`
+
+Associer un obstacle à une zone.
+
+---
+
+#### **GET** `/api/zone-obstacles`
+
+Lister toutes les associations zone-obstacle.
+
+---
+
+#### **DELETE** `/api/zone-obstacles/{zone_id}/{obstacle_id}`
+
+Supprimer une association.
+
+---
+
+## 📄 Pagination
+
+La pagination est supportée sur tous les endpoints de liste.
+
+### Format de réponse paginée
 
 ```json
-[1, 3, 5, 12] // Liste des IDs de zones
+{
+  "success": true,
+  "data": [...],
+  "pagination": {
+    "currentPage": 2,
+    "pageSize": 20,
+    "totalItems": 150,
+    "totalPages": 8,
+    "hasNext": true,
+    "hasPrev": true,
+    "links": {
+      "self": "/api/antennes?pageSize=20&page=2",
+      "first": "/api/antennes?pageSize=20&page=1",
+      "last": "/api/antennes?pageSize=20&page=8",
+      "next": "/api/antennes?pageSize=20&page=3",
+      "prev": "/api/antennes?pageSize=20&page=1"
+    }
+  }
+}
 ```
 
-### 6. 🚧 Relations Zones-Obstacles (`/zone-obstacle/*`)
+### Limites
 
-| Méthode | Endpoint                        | Description                     |
-| ------- | ------------------------------- | ------------------------------- |
-| `POST`  | `/zone-obstacle/link`           | Lier une zone à un obstacle     |
-| `POST`  | `/zone-obstacle/unlink`         | Délier une zone d'un obstacle   |
-| `GET`   | `/zone/{zone_id}/obstacles`     | Obstacles dans une zone         |
-| `GET`   | `/obstacle/{obstacle_id}/zones` | Zones affectées par un obstacle |
-| `GET`   | `/zone-obstacle/all`            | Toutes les relations            |
+- `pageSize` max: 100
+- `page` min: 1
 
-## 🗄️ Schéma de Base de Données
+---
 
-### Tables Principales
+## ✅ Validation
 
-```sql
--- Opérateurs télécoms
-CREATE TABLE operator (
-    id SERIAL PRIMARY KEY,
-    name VARCHAR(255) NOT NULL UNIQUE
-);
+### Coordonnées GPS
 
--- Antennes (avec géométrie PostGIS)
-CREATE TABLE antenna (
-    id SERIAL PRIMARY KEY,
-    coverage_radius FLOAT,
-    status antenna_status NOT NULL,
-    technology technology_type NOT NULL,
-    installation_date DATE,
-    operator_id INTEGER REFERENCES operator(id),
-    geom GEOMETRY(Point, 4326) NOT NULL
-);
+- **Latitude**: `-90.0` à `+90.0`
+- **Longitude**: `-180.0` à `+180.0`
 
--- Zones géographiques (polygones)
-CREATE TABLE zone (
-    id SERIAL PRIMARY KEY,
-    name VARCHAR(255) NOT NULL UNIQUE,
-    type zone_type NOT NULL,
-    density DOUBLE PRECISION,
-    parent_id INTEGER REFERENCES zone(id),
-    geom GEOMETRY(Polygon, 4326) NOT NULL
-);
+### Antennes
 
--- Obstacles (géométries multiples)
-CREATE TABLE obstacle (
-    id SERIAL PRIMARY KEY,
-    type VARCHAR(50) NOT NULL,
-    geom_type VARCHAR(20),
-    geom GEOMETRY NOT NULL
-);
+- **Coverage radius**: `> 0` et `≤ 50000` mètres
+- **Status**: `active`, `inactive`, `maintenance`, `planned`
+- **Technology**: `4G`, `5G`, `5G-SA`, `5G-NSA`
 
--- Table de liaison Antennes-Zones
-CREATE TABLE antenna_zone (
-    antenna_id INTEGER REFERENCES antenna(id) ON DELETE CASCADE,
-    zone_id INTEGER REFERENCES zone(id) ON DELETE CASCADE,
-    PRIMARY KEY (antenna_id, zone_id)
-);
+### Obstacles
 
--- Table de liaison Zones-Obstacles
-CREATE TABLE zone_obstacle (
-    zone_id INTEGER REFERENCES zone(id) ON DELETE CASCADE,
-    obstacle_id INTEGER REFERENCES obstacle(id) ON DELETE CASCADE,
-    PRIMARY KEY (zone_id, obstacle_id)
-);
+- **Type**: `batiment`, `vegetation`, `relief`
+- **Geom type**: `POINT`, `POLYGON`, `LINESTRING`
+
+### Opérateurs
+
+- **Email**: Format RFC 5322
+- **Téléphone**: Format international `+[country][number]`
+
+### Zones
+
+- **Name**: Non vide, max 255 caractères
+- **WKT**: Format PostGIS valide
+
+---
+
+## ❌ Gestion des erreurs
+
+### Format de réponse d'erreur
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "23505",
+    "type": "unique_violation",
+    "message": "Duplicate key value violates unique constraint",
+    "detail": "Key (email)=(test@example.com) already exists.",
+    "hint": "Please use a different email address",
+    "severity": "ERROR"
+  },
+  "timestamp": "2024-11-23T10:30:00Z"
+}
 ```
 
-### Index Géospatiaux
+### Codes HTTP
 
-```sql
-CREATE INDEX idx_antenna_geom ON antenna USING GIST (geom);
-CREATE INDEX idx_zone_geom ON zone USING GIST (geom);
-CREATE INDEX idx_obstacle_geom ON obstacle USING GIST (geom);
+| Code | Signification                   |
+| ---- | ------------------------------- |
+| 200  | Succès                          |
+| 201  | Créé                            |
+| 204  | Supprimé (pas de contenu)       |
+| 400  | Erreur de validation            |
+| 404  | Ressource non trouvée           |
+| 409  | Conflit (duplicate, contrainte) |
+| 500  | Erreur serveur                  |
+
+### Erreurs de validation
+
+```json
+{
+  "success": false,
+  "errors": [
+    {
+      "field": "latitude",
+      "message": "Latitude must be between -90 and +90 degrees"
+    },
+    {
+      "field": "technology",
+      "message": "Technology must be one of: 4G, 5G, 5G-SA, 5G-NSA"
+    }
+  ]
+}
 ```
 
-## 🚀 Installation et Démarrage
+---
+
+## 🚀 Installation
 
 ### Prérequis
 
-- **Docker Desktop** (Windows/Mac/Linux)
-- **PostgreSQL 14+** avec **PostGIS 3.x**
-- **CMake 3.14+** (pour compilation locale)
-- **Git** (pour cloner le dépôt)
+- Docker & Docker Compose
+- PostgreSQL 14+ avec PostGIS
+- C++17
+- Drogon Framework
 
-### Configuration PostgreSQL
+### Configuration Docker
 
-1. Modifiez [`C:\Program Files\PostgreSQL\14\data\postgresql.conf`](C:\Program Files\PostgreSQL\14\data\postgresql.conf):
-
-```ini
-listen_addresses = '*'
+```yaml
+version: "3.8"
+services:
+  postgres:
+    image: postgis/postgis:14-3.3
+    environment:
+      POSTGRES_DB: antennes_5g
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5432:5432"
 ```
 
-2. Modifiez [`C:\Program Files\PostgreSQL\14\data\pg_hba.conf`](C:\Program Files\PostgreSQL\14\data\pg_hba.conf):
-
-```
-host    all    all    0.0.0.0/0    trust
-```
-
-3. Redémarrez PostgreSQL dans `services.msc`.
-
-### Démarrage Rapide
-
-#### Option 1: Script Batch (Windows)
-
-```bat
-quick-start.bat
-```
-
-#### Option 2: Script PowerShell
-
-```powershell
-.\setup.ps1
-```
-
-#### Option 3: Docker Compose
+### Build
 
 ```bash
-docker-compose up -d --build
+# Cloner le projet
+git clone <repo-url>
+cd antennes-5g
+
+# Build Docker
+docker build -t antennes-5g-api .
+
+# Lancer l'API
+docker run -p 8080:8080 antennes-5g-api
 ```
 
-### Vérification
+### Configuration
 
-Testez le démarrage:
-
-```bash
-curl http://localhost:8080/health
-```
-
-Réponse attendue:
+Fichier `config.json`:
 
 ```json
 {
-  "status": "ok",
-  "database": "connected",
-  "postgis": "3.x"
+  "app": {
+    "threads_num": 4,
+    "port": 8080,
+    "server_header_field": "Antennes-5G-API"
+  },
+  "db": {
+    "host": "postgres",
+    "port": 5432,
+    "dbname": "antennes_5g",
+    "user": "admin",
+    "password": "password",
+    "client_encoding": "UTF8"
+  }
 }
 ```
 
-## 📖 Exemples d'Utilisation
+---
 
-### 1. Créer un Opérateur
+## 💡 Exemples d'utilisation
 
-```bash
-curl -X POST http://localhost:8080/api/operators \
-  -H "Content-Type: application/json" \
-  -d '{"name": "Maroc Telecom"}'
-```
-
-### 2. Créer une Antenne 5G
+### Créer une antenne avec cURL
 
 ```bash
 curl -X POST http://localhost:8080/api/antennes \
   -H "Content-Type: application/json" \
   -d '{
+    "latitude": 48.8566,
+    "longitude": 2.3522,
     "coverage_radius": 5000,
     "status": "active",
     "technology": "5G",
     "installation_date": "2024-01-15",
-    "operator_id": 1,
-    "latitude": 33.5731,
-    "longitude": -7.5898
+    "operator_id": 1
   }'
 ```
 
-### 3. Rechercher les Antennes dans un Rayon
+### Recherche dans un rayon
 
 ```bash
-# Antennes dans un rayon de 10km autour de Casablanca
-curl "http://localhost:8080/api/antennes/search?lat=33.5731&lon=-7.5898&radius=10000"
+curl "http://localhost:8080/api/antennes/search/radius?lat=48.8566&lon=2.3522&radius=10000"
 ```
 
-### 4. Créer une Zone
+### Export GeoJSON pour Leaflet
+
+```javascript
+// JavaScript avec Leaflet
+fetch("http://localhost:8080/api/antennes/geojson")
+  .then((res) => res.json())
+  .then((data) => {
+    L.geoJSON(data, {
+      pointToLayer: (feature, latlng) => {
+        return L.circle(latlng, {
+          radius: feature.properties.coverage_radius,
+          color: feature.properties.status === "active" ? "green" : "red",
+        });
+      },
+    }).addTo(map);
+  });
+```
+
+### Pagination
 
 ```bash
-curl -X POST http://localhost:8080/api/zones \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "Casablanca Centre",
-    "type": "coverage",
-    "density": 1500.0,
-    "wkt": "POLYGON((-7.6 33.57, -7.58 33.57, -7.58 33.59, -7.6 33.59, -7.6 33.57))",
-    "parent_id": 0
-  }'
+# Page 2, 50 éléments par page
+curl "http://localhost:8080/api/antennes?page=2&pageSize=50"
 ```
 
-### 5. Lier une Antenne à une Zone
+---
 
-```bash
-curl -X POST http://localhost:8080/antenna-zone/link \
-  -H "Content-Type: application/json" \
-  -d '{"antenna_id": 1, "zone_id": 1}'
-```
+## 📝 Notes techniques
 
-### 6. Export GeoJSON pour Leaflet
+### PostGIS
 
-```bash
-curl http://localhost:8080/api/antennes/geojson > antennes.geojson
-```
+L'API utilise PostGIS pour:
 
-## 🧪 Tests avec Postman
+- Calcul de distances géographiques (ST_Distance)
+- Recherche dans un rayon (ST_DWithin)
+- Recherche dans une bbox (ST_MakeEnvelope)
+- Calcul d'aires (ST_Area)
+- Export GeoJSON (ST_AsGeoJSON)
 
-Importez la collection de tests:
+### Performance
 
-```bash
-tests/postman_collection.json
-```
-
-**Tests disponibles:**
-
-- ✅ Health Check
-- ✅ Database Connection Test
-- ✅ CRUD Antennes
-- ✅ CRUD Opérateurs
-- ✅ CRUD Zones
-- ✅ CRUD Obstacles
-- ✅ Relations Antennes-Zones
-- ✅ Relations Zones-Obstacles
-- ✅ Recherche Géospatiale
-- ✅ Export GeoJSON
-
-## 🐛 Dépannage
-
-### Problème: "Connection refused"
-
-**Solution:** Vérifiez que PostgreSQL écoute sur `0.0.0.0`:
-
-```bash
-psql -U yacouba -h localhost -c "SELECT 1"
-```
-
-### Problème: "Address already in use :8080"
-
-**Solution:** Changez le port dans docker-compose.yml:
-
-```yaml
-ports:
-  - "8081:8080" # Utiliser le port 8081 au lieu de 8080
-```
-
-### Problème: Logs vides
-
-**Solution:**
-
-```bash
-docker-compose logs -f api_cpp
-```
-
-## 📊 Commandes Utiles
-
-### Docker
-
-```bash
-# Voir les services en cours
-docker-compose ps
-
-# Voir les logs en temps réel
-docker-compose logs -f api_cpp
-
-# Redémarrer l'API
-docker-compose restart api_cpp
-
-# Arrêter les services
-docker-compose down
-
-# Supprimer les volumes (réinitialisation complète)
-docker-compose down -v
-
-# Rebuild complet
-docker-compose up -d --build
-```
-
-### PostgreSQL
-
-```bash
-# Se connecter à la base
-psql -U yacouba -h localhost -d antennes_5g
-
-# Lister les tables
-\dt
-
-# Vérifier PostGIS
-SELECT PostGIS_version();
-
-# Compter les antennes
-SELECT COUNT(*) FROM antenna;
-```
-
-## 📚 Documentation Technique
-
-- **Drogon Framework:** [https://github.com/drogonframework/drogon](https://github.com/drogonframework/drogon)
-- **PostGIS:** [https://postgis.net/documentation/](https://postgis.net/documentation/)
-- **GeoJSON Spec:** [https://tools.ietf.org/html/rfc7946](https://tools.ietf.org/html/rfc7946)
+- Index spatial sur colonnes géométriques
+- Pagination obligatoire au-delà de 100 éléments
+- Cache des requêtes fréquentes recommandé

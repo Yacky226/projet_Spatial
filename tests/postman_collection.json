@@ -1,153 +1,21 @@
 ﻿{
   "info": {
-    "name": "Antennes 5G API",
-    "description": "Collection pour tester l'API de gestion des antennes 5G",
-    "version": "1.0.0"
+    "name": "Antennes 5G API - Complete",
+    "description": "Collection complète pour tester l'API de gestion des antennes 5G avec PostGIS",
+    "version": "2.0.0",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
-  "item": [
+  "variable": [
     {
-      "name": "🧪 TESTS",
-      "item": [
-        {
-          "name": "Health Check",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "http://localhost:8080/health",
-              "protocol": "http",
-              "host": ["localhost"],
-              "port": "8080",
-              "path": ["health"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Database Connection Test",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "http://localhost:8080/api/test/db",
-              "protocol": "http",
-              "host": ["localhost"],
-              "port": "8080",
-              "path": ["api", "test", "db"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Tables Information",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "http://localhost:8080/api/test/tables",
-              "protocol": "http",
-              "host": ["localhost"],
-              "port": "8080",
-              "path": ["api", "test", "tables"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Database Statistics",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "http://localhost:8080/api/test/stats",
-              "protocol": "http",
-              "host": ["localhost"],
-              "port": "8080",
-              "path": ["api", "test", "stats"]
-            }
-          },
-          "response": []
-        }
-      ]
-    },
+      "key": "baseUrl",
+      "value": "http://localhost:8080",
+      "type": "string"
+    }
+  ],
+  "item": [
     {
       "name": "📡 ANTENNES",
       "item": [
-        {
-          "name": "Get All Antennes",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "http://localhost:8080/api/antennes",
-              "protocol": "http",
-              "host": ["localhost"],
-              "port": "8080",
-              "path": ["api", "antennes"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Get Antenne By ID",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "http://localhost:8080/api/antennes/1",
-              "protocol": "http",
-              "host": ["localhost"],
-              "port": "8080",
-              "path": ["api", "antennes", "1"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Get Antennes By Type",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "http://localhost:8080/api/antennes/type/5G",
-              "protocol": "http",
-              "host": ["localhost"],
-              "port": "8080",
-              "path": ["api", "antennes", "type", "5G"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Get Antennes GeoJSON",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "http://localhost:8080/api/antennes/geojson",
-              "protocol": "http",
-              "host": ["localhost"],
-              "port": "8080",
-              "path": ["api", "antennes", "geojson"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Get Coverage Area",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "http://localhost:8080/api/antennes/1/couverture",
-              "protocol": "http",
-              "host": ["localhost"],
-              "port": "8080",
-              "path": ["api", "antennes", "1", "couverture"]
-            }
-          },
-          "response": []
-        },
         {
           "name": "Create Antenne",
           "request": {
@@ -160,17 +28,64 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"latitude\": 33.5731,\n  \"longitude\": -7.5898,\n  \"type\": \"5G\",\n  \"puissance\": 100,\n  \"portee\": 5000,\n  \"statut\": \"active\",\n  \"date_installation\": \"2024-01-15\"\n}"
+              "raw": "{\n  \"latitude\": 48.8566,\n  \"longitude\": 2.3522,\n  \"coverage_radius\": 5000,\n  \"status\": \"active\",\n  \"technology\": \"5G\",\n  \"installation_date\": \"2024-01-15\",\n  \"operator_id\": 1\n}"
             },
             "url": {
-              "raw": "http://localhost:8080/api/antennes",
-              "protocol": "http",
-              "host": ["localhost"],
-              "port": "8080",
+              "raw": "{{baseUrl}}/api/antennes",
+              "host": ["{{baseUrl}}"],
               "path": ["api", "antennes"]
-            }
-          },
-          "response": []
+            },
+            "description": "Créer une nouvelle antenne 5G"
+          }
+        },
+        {
+          "name": "Get All Antennes",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/antennes",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "antennes"]
+            },
+            "description": "Récupérer toutes les antennes"
+          }
+        },
+        {
+          "name": "Get All Antennes (Paginated)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/antennes?page=1&pageSize=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "antennes"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Récupérer les antennes avec pagination"
+          }
+        },
+        {
+          "name": "Get Antenne By ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/antennes/1",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "antennes", "1"]
+            },
+            "description": "Récupérer une antenne par son ID"
+          }
         },
         {
           "name": "Update Antenne",
@@ -184,17 +99,15 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"latitude\": 33.5731,\n  \"longitude\": -7.5898,\n  \"type\": \"4G/5G\",\n  \"puissance\": 150,\n  \"portee\": 6000,\n  \"statut\": \"active\"\n}"
+              "raw": "{\n  \"status\": \"maintenance\",\n  \"coverage_radius\": 6000\n}"
             },
             "url": {
-              "raw": "http://localhost:8080/api/antennes/1",
-              "protocol": "http",
-              "host": ["localhost"],
-              "port": "8080",
+              "raw": "{{baseUrl}}/api/antennes/1",
+              "host": ["{{baseUrl}}"],
               "path": ["api", "antennes", "1"]
-            }
-          },
-          "response": []
+            },
+            "description": "Mettre à jour une antenne existante"
+          }
         },
         {
           "name": "Delete Antenne",
@@ -202,14 +115,771 @@
             "method": "DELETE",
             "header": [],
             "url": {
-              "raw": "http://localhost:8080/api/antennes/1",
-              "protocol": "http",
-              "host": ["localhost"],
-              "port": "8080",
+              "raw": "{{baseUrl}}/api/antennes/1",
+              "host": ["{{baseUrl}}"],
               "path": ["api", "antennes", "1"]
-            }
-          },
-          "response": []
+            },
+            "description": "Supprimer une antenne"
+          }
+        },
+        {
+          "name": "Search Antennes in Radius",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/antennes/search/radius?lat=48.8566&lon=2.3522&radius=10000",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "antennes", "search", "radius"],
+              "query": [
+                {
+                  "key": "lat",
+                  "value": "48.8566"
+                },
+                {
+                  "key": "lon",
+                  "value": "2.3522"
+                },
+                {
+                  "key": "radius",
+                  "value": "10000"
+                }
+              ]
+            },
+            "description": "Rechercher des antennes dans un rayon (en mètres)"
+          }
+        },
+        {
+          "name": "Search Antennes in Radius (Paginated)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/antennes/search/radius?lat=48.8566&lon=2.3522&radius=10000&page=1&pageSize=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "antennes", "search", "radius"],
+              "query": [
+                {
+                  "key": "lat",
+                  "value": "48.8566"
+                },
+                {
+                  "key": "lon",
+                  "value": "2.3522"
+                },
+                {
+                  "key": "radius",
+                  "value": "10000"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Rechercher des antennes dans un rayon avec pagination"
+          }
+        },
+        {
+          "name": "Get Antennes GeoJSON",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/antennes/geojson",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "antennes", "geojson"]
+            },
+            "description": "Export GeoJSON de toutes les antennes"
+          }
+        },
+        {
+          "name": "Get Antennes GeoJSON (Paginated)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/antennes/geojson?page=1&pageSize=50",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "antennes", "geojson"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "50"
+                }
+              ]
+            },
+            "description": "Export GeoJSON paginé"
+          }
+        },
+        {
+          "name": "Get Antennes GeoJSON in Radius",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/antennes/geojson/radius?lat=48.8566&lon=2.3522&radius=10000",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "antennes", "geojson", "radius"],
+              "query": [
+                {
+                  "key": "lat",
+                  "value": "48.8566"
+                },
+                {
+                  "key": "lon",
+                  "value": "2.3522"
+                },
+                {
+                  "key": "radius",
+                  "value": "10000"
+                }
+              ]
+            },
+            "description": "Export GeoJSON des antennes dans un rayon"
+          }
+        },
+        {
+          "name": "Get Antennes GeoJSON in BBox",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/antennes/geojson/bbox?minLat=48.8&minLon=2.3&maxLat=48.9&maxLon=2.4",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "antennes", "geojson", "bbox"],
+              "query": [
+                {
+                  "key": "minLat",
+                  "value": "48.8"
+                },
+                {
+                  "key": "minLon",
+                  "value": "2.3"
+                },
+                {
+                  "key": "maxLat",
+                  "value": "48.9"
+                },
+                {
+                  "key": "maxLon",
+                  "value": "2.4"
+                }
+              ]
+            },
+            "description": "Export GeoJSON des antennes dans une bounding box"
+          }
+        }
+      ]
+    },
+    {
+      "name": "🏢 OBSTACLES",
+      "item": [
+        {
+          "name": "Create Obstacle",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"batiment\",\n  \"geom_type\": \"POLYGON\",\n  \"wkt\": \"POLYGON((2.35 48.85, 2.36 48.85, 2.36 48.86, 2.35 48.86, 2.35 48.85))\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/obstacles",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "obstacles"]
+            },
+            "description": "Créer un nouvel obstacle"
+          }
+        },
+        {
+          "name": "Create Obstacle (Point)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"vegetation\",\n  \"geom_type\": \"POINT\",\n  \"wkt\": \"POINT(2.3522 48.8566)\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/obstacles",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "obstacles"]
+            },
+            "description": "Créer un obstacle de type POINT"
+          }
+        },
+        {
+          "name": "Get All Obstacles",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/obstacles",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "obstacles"]
+            },
+            "description": "Récupérer tous les obstacles"
+          }
+        },
+        {
+          "name": "Get All Obstacles (Paginated)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/obstacles?page=1&pageSize=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "obstacles"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Récupérer les obstacles avec pagination"
+          }
+        },
+        {
+          "name": "Get Obstacle By ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/obstacles/1",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "obstacles", "1"]
+            },
+            "description": "Récupérer un obstacle par son ID"
+          }
+        },
+        {
+          "name": "Update Obstacle",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"relief\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/obstacles/1",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "obstacles", "1"]
+            },
+            "description": "Mettre à jour un obstacle"
+          }
+        },
+        {
+          "name": "Delete Obstacle",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/obstacles/1",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "obstacles", "1"]
+            },
+            "description": "Supprimer un obstacle"
+          }
+        },
+        {
+          "name": "Get Obstacles GeoJSON",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/obstacles/geojson",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "obstacles", "geojson"]
+            },
+            "description": "Export GeoJSON de tous les obstacles"
+          }
+        },
+        {
+          "name": "Get Obstacles GeoJSON (Paginated)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/obstacles/geojson?page=1&pageSize=50",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "obstacles", "geojson"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "50"
+                }
+              ]
+            },
+            "description": "Export GeoJSON paginé des obstacles"
+          }
+        }
+      ]
+    },
+    {
+      "name": "🗺️ ZONES",
+      "item": [
+        {
+          "name": "Create Zone",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Zone Centre Paris\",\n  \"wkt\": \"POLYGON((2.33 48.86, 2.34 48.86, 2.34 48.87, 2.33 48.87, 2.33 48.86))\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/zones",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "zones"]
+            },
+            "description": "Créer une nouvelle zone géographique"
+          }
+        },
+        {
+          "name": "Get All Zones",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/zones",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "zones"]
+            },
+            "description": "Récupérer toutes les zones"
+          }
+        },
+        {
+          "name": "Get All Zones (Paginated)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/zones?page=1&pageSize=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "zones"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Récupérer les zones avec pagination"
+          }
+        },
+        {
+          "name": "Get Zone By ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/zones/1",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "zones", "1"]
+            },
+            "description": "Récupérer une zone par son ID"
+          }
+        },
+        {
+          "name": "Update Zone",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Zone Centre Paris - Mise à jour\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/zones/1",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "zones", "1"]
+            },
+            "description": "Mettre à jour une zone"
+          }
+        },
+        {
+          "name": "Delete Zone",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/zones/1",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "zones", "1"]
+            },
+            "description": "Supprimer une zone"
+          }
+        },
+        {
+          "name": "Get Zones GeoJSON",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/zones/geojson",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "zones", "geojson"]
+            },
+            "description": "Export GeoJSON de toutes les zones"
+          }
+        }
+      ]
+    },
+    {
+      "name": "📞 OPERATORS",
+      "item": [
+        {
+          "name": "Create Operator",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Orange\",\n  \"contact_email\": \"contact@orange.fr\",\n  \"contact_phone\": \"+33123456789\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/operators",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "operators"]
+            },
+            "description": "Créer un nouvel opérateur"
+          }
+        },
+        {
+          "name": "Get All Operators",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/operators",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "operators"]
+            },
+            "description": "Récupérer tous les opérateurs"
+          }
+        },
+        {
+          "name": "Get All Operators (Paginated)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/operators?page=1&pageSize=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "operators"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Récupérer les opérateurs avec pagination"
+          }
+        },
+        {
+          "name": "Get Operator By ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/operators/1",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "operators", "1"]
+            },
+            "description": "Récupérer un opérateur par son ID"
+          }
+        },
+        {
+          "name": "Update Operator",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"contact_email\": \"nouveau.contact@orange.fr\",\n  \"contact_phone\": \"+33987654321\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/operators/1",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "operators", "1"]
+            },
+            "description": "Mettre à jour un opérateur"
+          }
+        },
+        {
+          "name": "Delete Operator",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/operators/1",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "operators", "1"]
+            },
+            "description": "Supprimer un opérateur"
+          }
+        }
+      ]
+    },
+    {
+      "name": "🔗 ANTENNA-ZONES",
+      "item": [
+        {
+          "name": "Create Antenna-Zone Association",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"antenna_id\": 1,\n  \"zone_id\": 2\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/antenna-zones",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "antenna-zones"]
+            },
+            "description": "Associer une antenne à une zone"
+          }
+        },
+        {
+          "name": "Get All Antenna-Zone Associations",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/antenna-zones",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "antenna-zones"]
+            },
+            "description": "Récupérer toutes les associations antenne-zone"
+          }
+        },
+        {
+          "name": "Delete Antenna-Zone Association",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/antenna-zones/1/2",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "antenna-zones", "1", "2"]
+            },
+            "description": "Supprimer une association antenne-zone"
+          }
+        }
+      ]
+    },
+    {
+      "name": "🔗 ZONE-OBSTACLES",
+      "item": [
+        {
+          "name": "Create Zone-Obstacle Association",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"zone_id\": 1,\n  \"obstacle_id\": 3\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/zone-obstacles",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "zone-obstacles"]
+            },
+            "description": "Associer un obstacle à une zone"
+          }
+        },
+        {
+          "name": "Get All Zone-Obstacle Associations",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/zone-obstacles",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "zone-obstacles"]
+            },
+            "description": "Récupérer toutes les associations zone-obstacle"
+          }
+        },
+        {
+          "name": "Delete Zone-Obstacle Association",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/zone-obstacles/1/3",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "zone-obstacles", "1", "3"]
+            },
+            "description": "Supprimer une association zone-obstacle"
+          }
+        }
+      ]
+    },
+    {
+      "name": "🧪 VALIDATION TESTS",
+      "item": [
+        {
+          "name": "Invalid Latitude (Should Fail)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"latitude\": 100,\n  \"longitude\": 2.3522,\n  \"coverage_radius\": 5000,\n  \"status\": \"active\",\n  \"technology\": \"5G\",\n  \"operator_id\": 1\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/antennes",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "antennes"]
+            },
+            "description": "Test validation latitude invalide"
+          }
+        },
+        {
+          "name": "Invalid Technology (Should Fail)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"latitude\": 48.8566,\n  \"longitude\": 2.3522,\n  \"coverage_radius\": 5000,\n  \"status\": \"active\",\n  \"technology\": \"6G\",\n  \"operator_id\": 1\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/antennes",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "antennes"]
+            },
+            "description": "Test validation technologie invalide"
+          }
+        },
+        {
+          "name": "Invalid Obstacle Type (Should Fail)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"invalide\",\n  \"geom_type\": \"POLYGON\",\n  \"wkt\": \"POLYGON((2.35 48.85, 2.36 48.85, 2.36 48.86, 2.35 48.86, 2.35 48.85))\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/obstacles",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "obstacles"]
+            },
+            "description": "Test validation type obstacle invalide"
+          }
+        },
+        {
+          "name": "Invalid Email (Should Fail)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Test Operator\",\n  \"contact_email\": \"invalid-email\",\n  \"contact_phone\": \"+33123456789\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/operators",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "operators"]
+            },
+            "description": "Test validation email invalide"
+          }
         }
       ]
     }

@@ -120,3 +120,128 @@ void ObstacleService::remove(int id, std::function<void(const std::string&)> cal
         callback(empty, e.base().what()); 
     });
 }
+
+// 6. READ ALL PAGINATED
+void ObstacleService::getAllPaginated(
+    int page, 
+    int pageSize,
+    std::function<void(const std::vector<ObstacleModel>&, const PaginationMeta&, const std::string&)> callback
+) {
+    auto client = app().getDbClient();
+    
+    // Requête pour compter le total
+    client->execSqlAsync(
+        "SELECT COUNT(*) FROM obstacle",
+        [callback, page, pageSize, client](const Result& r) {
+            int totalItems = r[0][0].as<int>();
+            int totalPages = (totalItems + pageSize - 1) / pageSize;
+            int offset = (page - 1) * pageSize;
+            
+            PaginationMeta meta;
+            meta.currentPage = page;
+            meta.pageSize = pageSize;
+            meta.totalItems = totalItems;
+            meta.totalPages = totalPages;
+            meta.hasNext = page < totalPages;
+            meta.hasPrev = page > 1;
+            
+            // Requête paginée
+            std::string sql = "SELECT id, type, geom_type, ST_AsText(geom) as wkt FROM obstacle ORDER BY id LIMIT $1 OFFSET $2";
+            client->execSqlAsync(
+                sql,
+                [callback, meta](const Result& r) {
+                    std::vector<ObstacleModel> list;
+                    for (auto row : r) {
+                        ObstacleModel o;
+                        o.id = row["id"].as<int>();
+                        o.type = row["type"].as<std::string>();
+                        o.geom_type = row["geom_type"].as<std::string>();
+                        o.wkt_geometry = row["wkt"].as<std::string>();
+                        list.push_back(o);
+                    }
+                    callback(list, meta, "");
+                },
+                [callback, meta](const DrogonDbException& e) {
+                    callback({}, meta, e.base().what());
+                },
+                pageSize,
+                offset
+            );
+        },
+        [callback](const DrogonDbException& e) {
+            PaginationMeta emptyMeta{};
+            callback({}, emptyMeta, e.base().what());
+        }
+    );
+}
+
+// 7. GET ALL GEOJSON PAGINATED
+void ObstacleService::getAllGeoJSONPaginated(
+    int page,
+    int pageSize,
+    std::function<void(const Json::Value&, const PaginationMeta&, const std::string&)> callback
+) {
+    auto client = app().getDbClient();
+    
+    client->execSqlAsync(
+        "SELECT COUNT(*) FROM obstacle",
+        [callback, page, pageSize, client](const Result& r) {
+            int totalItems = r[0][0].as<int>();
+            int totalPages = (totalItems + pageSize - 1) / pageSize;
+            int offset = (page - 1) * pageSize;
+            
+            PaginationMeta meta;
+            meta.currentPage = page;
+            meta.pageSize = pageSize;
+            meta.totalItems = totalItems;
+            meta.totalPages = totalPages;
+            meta.hasNext = page < totalPages;
+            meta.hasPrev = page > 1;
+            
+            std::string sql = "SELECT id, type, geom_type, ST_AsGeoJSON(geom) as geojson FROM obstacle ORDER BY id LIMIT $1 OFFSET $2";
+            client->execSqlAsync(
+                sql,
+                [callback, meta](const Result& r) {
+                    Json::Value featureCollection;
+                    featureCollection["type"] = "FeatureCollection";
+                    Json::Value features(Json::arrayValue);
+                    
+                    Json::CharReaderBuilder builder;
+                    std::unique_ptr<Json::CharReader> reader(builder.newCharReader());
+                    std::string errs;
+                    
+                    for (auto row : r) {
+                        Json::Value feature;
+                        feature["type"] = "Feature";
+                        
+                        Json::Value props;
+                        props["id"] = row["id"].as<int>();
+                        props["type"] = row["type"].as<std::string>();
+                        props["geom_type"] = row["geom_type"].as<std::string>();
+                        feature["properties"] = props;
+                        
+                        std::string geoString = row["geojson"].as<std::string>();
+                        Json::Value geomObj;
+                        if(reader->parse(geoString.c_str(), geoString.c_str() + geoString.length(), &geomObj, &errs)){
+                            feature["geometry"] = geomObj;
+                        }
+                        features.append(feature);
+                    }
+                    featureCollection["features"] = features;
+                    callback(featureCollection, meta, "");
+                },
+                [callback, meta](const DrogonDbException& e) {
+                    Json::Value empty;
+                    callback(empty, meta, e.base().what());
+                },
+                pageSize,
+                offset
+            );
+        },
+        [callback](const DrogonDbException& e) {
+            Json::Value empty;
+            PaginationMeta emptyMeta{};
+            callback(empty, emptyMeta, e.base().what());
+        }
+    );
+}
