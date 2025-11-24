@@ -107,8 +107,12 @@ void AntenneController::getAll(const HttpRequestPtr& req, std::function<void (co
     if (paginationParams.page < 1) {
         validator.addError("page", "Page number must be at least 1");
     }
-    if (paginationParams.pageSize < 1 || paginationParams.pageSize > 100) {
-        validator.addError("pageSize", "Page size must be between 1 and 100");
+    
+    // Pour la pagination explicite (avec paramètre page), limiter à 100
+    // Pour la récupération en masse (pageSize sans page), permettre jusqu'à 10000
+    int maxPageSize = paginationParams.page > 1 ? 100 : 10000;
+    if (paginationParams.pageSize < 1 || paginationParams.pageSize > maxPageSize) {
+        validator.addError("pageSize", "Page size must be between 1 and " + std::to_string(maxPageSize));
     }
     
     if (validator.hasErrors()) {
@@ -120,8 +124,8 @@ void AntenneController::getAll(const HttpRequestPtr& req, std::function<void (co
         return;
     }
     
-    // Si pagination demandée
-    if (paginationParams.usePagination) {
+    // Si pagination explicite demandée (paramètre page fourni)
+    if (paginationParams.page > 1) {
         AntenneService::getAllPaginated(paginationParams.page, paginationParams.pageSize,
             [callback, paginationParams](const std::vector<Antenna>& list, const PaginationMeta& meta, const std::string& err) {
                 if (err.empty()) {
@@ -152,7 +156,7 @@ void AntenneController::getAll(const HttpRequestPtr& req, std::function<void (co
             }
         );
     } else {
-        // Sans pagination (rétrocompatibilité)
+        // Sans pagination (rétrocompatibilité) - récupération en masse
         AntenneService::getAll([callback](const std::vector<Antenna>& list, const std::string& err) {
             if (err.empty()) {
                 Json::Value response;

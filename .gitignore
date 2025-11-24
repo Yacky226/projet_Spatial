@@ -1,0 +1,365 @@
+# ========================================
+# GitIgnore pour Projet SIG C++ Backend
+# Drogon + PostgreSQL + PostGIS + CMake
+# ========================================
+
+# ---------------------------------------
+# Build et Binaires C++
+# ---------------------------------------
+build/
+cmake-build-*/
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+install_manifest.txt
+compile_commands.json
+CTestTestfile.cmake
+_deps
+
+# Binaires et exécutables
+*.exe
+*.out
+*.o
+*.so
+*.dylib
+*.dll
+*.lib
+*.a
+*.pdb
+*.ilk
+*.exp
+
+# ---------------------------------------
+# IDE et Éditeurs
+# ---------------------------------------
+
+# Visual Studio
+.vs/
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+*.sln
+*.suo
+*.user
+*.aps
+*.pch
+*.vspscc
+*_i.c
+*_p.c
+*.ncb
+*.suo
+*.tlb
+*.tlh
+*.tmp
+*.tmp_proj
+*.log
+*.vspscc
+*.vssscc
+.builds
+*.pidb
+*.log
+*.svclog
+*.scc
+
+# CLion
+.idea/
+cmake-build-*/
+
+# Qt Creator
+*.pro.user
+*.pro.user.*
+*.qbs.user
+*.qbs.user.*
+*.moc
+moc_*.cpp
+moc_*.h
+qrc_*.cpp
+ui_*.h
+Makefile*
+
+# Eclipse
+.project
+.cproject
+.autotools
+.factorypath
+.buildpath
+.target
+
+# Code::Blocks
+*.cbp
+*.layout
+*.depend
+
+# NetBeans
+nbproject/private/
+build/
+nbbuild/
+dist/
+nbdist/
+.nb-gradle/
+
+# ---------------------------------------
+# Systèmes d'exploitation
+# ---------------------------------------
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+*.stackdump
+
+# macOS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+.AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# ---------------------------------------
+# Frameworks et Librairies
+# ---------------------------------------
+
+# Drogon
+drogon_ctl
+
+# PostgreSQL/PostGIS
+postgresql/
+pgdata/
+*.pgpass
+
+# ---------------------------------------
+# Logs et Debug
+# ---------------------------------------
+*.log
+logs/
+log/
+*.log.*
+drogon.log
+trantor.log
+
+# Fichiers de debug
+*.dmp
+*.mdmp
+core
+core.*
+
+# ---------------------------------------
+# Cache et Temporaires
+# ---------------------------------------
+.cache/
+tmp/
+temp/
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+
+# Cache CMake
+CMakeCache.txt
+CMakeFiles/
+CMakeScripts/
+Testing/
+Makefile
+cmake_install.cmake
+install_manifest.txt
+compile_commands.json
+CTestTestfile.cmake
+
+# Cache de compilation
+*.gch
+*.pch
+
+# ---------------------------------------
+# Tests
+# ---------------------------------------
+Testing/
+test_results/
+*.gcda
+*.gcno
+*.gcov
+coverage/
+*.profraw
+
+# Google Test
+gtest/
+
+# ---------------------------------------
+# Documentation générée
+# ---------------------------------------
+docs/html/
+docs/latex/
+docs/man/
+*.dox
+doxygen/
+
+# ---------------------------------------
+# Déploiement et Distribution
+# ---------------------------------------
+dist/
+release/
+*.deb
+*.rpm
+*.dmg
+*.pkg
+*.appimage
+
+# Docker
+.dockerignore
+
+# ---------------------------------------
+# Environnements virtuels
+# ---------------------------------------
+venv/
+env/
+ENV/
+
+# ---------------------------------------
+# Secrets et Configuration sensible
+# ---------------------------------------
+config/secrets.json
+config/production.json
+*.key
+*.pem
+*.crt
+*.p12
+*.pfx
+.env
+.env.local
+.env.*.local
+
+# ---------------------------------------
+# Données de développement
+# ---------------------------------------
+data/
+*.db
+*.sqlite
+*.sqlite3
+
+# ---------------------------------------
+# Outils de développement
+# ---------------------------------------
+.vscode/
+.history/
+.ionide/
+*.code-workspace
+
+# ---------------------------------------
+# CI/CD
+# ---------------------------------------
+.github/workflows/
+.gitlab-ci.yml
+Jenkinsfile
+azure-pipelines.yml
+
+# ---------------------------------------
+# Sauvegardes
+# ---------------------------------------
+*.bak
+*.backup
+*.old
+*.orig
+*.rej
+
+# ---------------------------------------
+# Fichiers spécifiques au projet
+# ---------------------------------------
+
+# Fichiers de configuration locaux
+config/local.json
+config/development.json
+
+# Données de test
+test_data/
+fixtures/
+
+# Rapports de performance
+benchmarks/
+perf_reports/
+
+# Cache d'analyse statique
+cppcheck_results/
+clang-tidy_results/
+scan-build/
+
+# ---------------------------------------
+# Réseau et Téléchargements
+# ---------------------------------------
+downloads/
+*.tar.gz
+*.zip
+*.7z
+*.rar
+
+# ---------------------------------------
+# Exceptions (fichiers à garder)
+# ---------------------------------------
+# Garder les fichiers de configuration d'exemple
+!config/config.example.json
+!config/config.template.json
+
+# Garder les scripts d'initialisation
+!scripts/init.sql
+!scripts/setup.sql
+
+# Garder la documentation
+!README.md
+!docs/*.md
+!CHANGELOG.md
+
+# Garder les exemples
+!examples/
+!samples/
+
+# ---------------------------------------
+# Règles spécifiques pour ce projet
+# ---------------------------------------
+
+# Exclure les fichiers générés par CMake
+**/CMakeCache.txt
+**/CMakeFiles/
+**/cmake_install.cmake
+
+# Exclure les binaires du projet
+antennes_5g
+antennes_5g.exe
+
+# Exclure les fichiers de log Drogon
+trantor.log
+drogon.log
+
+# Exclure les données de base de données de développement
+*.db
+*.sqlite*
