@@ -43,5 +43,5 @@ RUN mkdir build && \
 
 # 5. Commande de lancement
 WORKDIR /app/build
-EXPOSE 8080
+EXPOSE 8082
 CMD ["./antennes_5g"]
