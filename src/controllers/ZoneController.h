@@ -12,6 +12,7 @@ public:
         ADD_METHOD_TO(ZoneController::update, "/api/zones/{1}", Put);
         ADD_METHOD_TO(ZoneController::remove, "/api/zones/{1}", Delete);
         ADD_METHOD_TO(ZoneController::getGeoJSON, "/api/zones/geojson", Get);
+        ADD_METHOD_TO(ZoneController::getWhiteZones, "/api/zones/{1}/white-zones?operator_id={2}", Get);
     METHOD_LIST_END
 
     void create(const HttpRequestPtr& req, std::function<void (const HttpResponsePtr &)> &&callback);
@@ -20,4 +21,5 @@ public:
     void update(const HttpRequestPtr& req, std::function<void (const HttpResponsePtr &)> &&callback, int id);
     void remove(const HttpRequestPtr& req, std::function<void (const HttpResponsePtr &)> &&callback, int id);
     void getGeoJSON(const HttpRequestPtr& req, std::function<void (const HttpResponsePtr &)> &&callback);
+    void getWhiteZones(const HttpRequestPtr& req, std::function<void (const HttpResponsePtr &)> &&callback, int zone_id, int operator_id);
 };

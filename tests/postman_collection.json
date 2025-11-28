@@ -2,7 +2,7 @@
   "info": {
     "name": "Antennes 5G API - Complete",
     "description": "Collection complète pour tester l'API de gestion des antennes 5G avec PostGIS",
-    "version": "2.0.0",
+    "version": "3.0.0",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -276,6 +276,19 @@
               ]
             },
             "description": "Export GeoJSON des antennes dans une bounding box"
+          }
+        },
+        {
+          "name": "Get Voronoi Diagram",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/antennes/voronoi",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "antennes", "voronoi"]
+            },
+            "description": "🆕 Obtenir le diagramme de Voronoi des antennes actives (délimite les zones de service)"
           }
         }
       ]
@@ -791,6 +804,196 @@
       ]
     },
     {
+      "name": "📊 COVERAGE (Couverture)",
+      "item": [
+        {
+          "name": "Get Antenna Coverage",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/coverage/antenna/1",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "coverage", "antenna", "1"]
+            },
+            "description": "Calculer la population couverte par une antenne spécifique"
+          }
+        },
+        {
+          "name": "Get White Zones (GeoJSON)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/coverage/white-zones/1",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "coverage", "white-zones", "1"]
+            },
+            "description": "🆕 Obtenir les zones blanches (non couvertes) d'une zone géographique en GeoJSON"
+          }
+        },
+        {
+          "name": "Get Global Coverage Stats",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/coverage/stats",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "coverage", "stats"]
+            },
+            "description": "🆕 Statistiques globales : nombre d'antennes, taux de couverture, population couverte, etc."
+          }
+        }
+      ]
+    },
+    {
+      "name": "📡 SIMULATION (Signal Radio)",
+      "item": [
+        {
+          "name": "Simulate Signal at Location",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/simulation/check?lat=48.8566&lon=2.3522",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "simulation", "check"],
+              "query": [
+                {
+                  "key": "lat",
+                  "value": "48.8566",
+                  "description": "Latitude du point à tester"
+                },
+                {
+                  "key": "lon",
+                  "value": "2.3522",
+                  "description": "Longitude du point à tester"
+                }
+              ]
+            },
+            "description": "Simuler la qualité du signal (FSPL + obstacles) à un point donné"
+          }
+        },
+        {
+          "name": "Simulate Signal - Casablanca Example",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/simulation/check?lat=33.5731&lon=-7.5898",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "simulation", "check"],
+              "query": [
+                {
+                  "key": "lat",
+                  "value": "33.5731"
+                },
+                {
+                  "key": "lon",
+                  "value": "-7.5898"
+                }
+              ]
+            },
+            "description": "Exemple pour Casablanca (Maroc)"
+          }
+        }
+      ]
+    },
+    {
+      "name": "🎯 OPTIMIZATION (Placement Antennes)",
+      "item": [
+        {
+          "name": "Optimize - Greedy Algorithm",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"zone_id\": 1,\n  \"antennas_count\": 5,\n  \"radius\": 2000,\n  \"technology\": \"5G\",\n  \"algorithm\": \"greedy\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/optimization/optimize",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "optimization", "optimize"]
+            },
+            "description": "Algorithme Greedy (Monte Carlo) : génération aléatoire de points candidats"
+          }
+        },
+        {
+          "name": "Optimize - K-Means Algorithm",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"zone_id\": 1,\n  \"antennas_count\": 5,\n  \"radius\": 2000,\n  \"technology\": \"5G\",\n  \"algorithm\": \"kmeans\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/optimization/optimize",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "optimization", "optimize"]
+            },
+            "description": "🆕 Algorithme K-Means Clustering : placement intelligent basé sur la densité de population"
+          }
+        },
+        {
+          "name": "Optimize - Large Zone (10 antennes)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"zone_id\": 1,\n  \"antennas_count\": 10,\n  \"radius\": 3000,\n  \"technology\": \"5G\",\n  \"algorithm\": \"kmeans\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/optimization/optimize",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "optimization", "optimize"]
+            },
+            "description": "Exemple d'optimisation pour une grande zone"
+          }
+        },
+        {
+          "name": "Optimize - 4G Network",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"zone_id\": 2,\n  \"antennas_count\": 3,\n  \"radius\": 5000,\n  \"technology\": \"4G\",\n  \"algorithm\": \"kmeans\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/optimization/optimize",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "optimization", "optimize"]
+            },
+            "description": "Optimisation pour un réseau 4G (rayon plus grand)"
+          }
+        }
+      ]
+    },
+    {
       "name": "🧪 VALIDATION TESTS",
       "item": [
         {
@@ -879,6 +1082,28 @@
               "path": ["api", "operators"]
             },
             "description": "Test validation email invalide"
+          }
+        },
+        {
+          "name": "Invalid Optimization Request (Should Fail)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"zone_id\": -1,\n  \"antennas_count\": 0,\n  \"radius\": 60000,\n  \"technology\": \"5G\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/optimization/optimize",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "optimization", "optimize"]
+            },
+            "description": "🆕 Test validation requête d'optimisation invalide"
           }
         }
       ]

@@ -21,7 +21,12 @@ public:
         ADD_METHOD_TO(AntenneController::getGeoJSON, "/api/antennes/geojson", Get); // Supporte pagination
         ADD_METHOD_TO(AntenneController::getGeoJSONInRadius, "/api/antennes/geojson/radius?lat={1}&lon={2}&radius={3}", Get); // Supporte pagination
         ADD_METHOD_TO(AntenneController::getGeoJSONInBBox, "/api/antennes/geojson/bbox?minLat={1}&minLon={2}&maxLat={3}&maxLon={4}", Get);
+       ADD_METHOD_TO(AntenneController::getCoverage, "/api/coverage/operator/{1}?minLat={2}&minLon={3}&maxLat={4}&maxLon={5}", Get);
+        
+        // NOUVEAU : Voronoi diagram
+        ADD_METHOD_TO(AntenneController::getVoronoi, "/api/antennes/voronoi", Get);
     METHOD_LIST_END
+
 
     // ========== CRUD ==========
     void create(const HttpRequestPtr& req, std::function<void (const HttpResponsePtr &)> &&callback);
@@ -40,4 +45,9 @@ public:
                            double lat, double lon, double radius);
     void getGeoJSONInBBox(const HttpRequestPtr& req, std::function<void (const HttpResponsePtr &)> &&callback,
                          double minLat, double minLon, double maxLat, double maxLon);
+    
+   void getCoverage(const HttpRequestPtr& req, std::function<void (const HttpResponsePtr &)> &&callback,
+                     int operator_id, double minLat, double minLon, double maxLat, double maxLon);
+    void getVoronoi(const HttpRequestPtr& req, std::function<void (const HttpResponsePtr &)> &&callback);
+                              
 };

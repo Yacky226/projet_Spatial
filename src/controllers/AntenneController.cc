@@ -638,3 +638,71 @@ void AntenneController::getGeoJSONInBBox(const HttpRequestPtr& req,
         }
     );
 }
+
+// ============================================================================
+// 10. GET COVERAGE BY OPERATOR
+// ============================================================================
+void AntenneController::getCoverage(const HttpRequestPtr& req, 
+                                   std::function<void (const HttpResponsePtr &)> &&callback,
+                                   int operator_id, double minLat, double minLon, double maxLat, double maxLon) {
+    
+    Validator::ErrorCollector validator;
+
+    if (!Validator::isNonNegative(operator_id) || operator_id == 0) {
+        validator.addError("operator_id", "Invalid operator ID");
+    }
+    if (!Validator::isValidLatitude(minLat) || !Validator::isValidLatitude(maxLat)) {
+        validator.addError("latitude", "Latitudes must be between -90 and +90 degrees");
+    }
+    if (!Validator::isValidLongitude(minLon) || !Validator::isValidLongitude(maxLon)) {
+        validator.addError("longitude", "Longitudes must be between -180 and +180 degrees");
+    }
+    // Correction simple si l'utilisateur inverse min/max
+    if (minLat > maxLat) std::swap(minLat, maxLat);
+    if (minLon > maxLon) std::swap(minLon, maxLon);
+
+    if (validator.hasErrors()) {
+        auto resp = HttpResponse::newHttpResponse();
+        resp->setStatusCode(k400BadRequest);
+        resp->setBody(validator.getErrorsAsJson());
+        resp->setContentTypeCode(CT_APPLICATION_JSON);
+        callback(resp);
+        return;
+    }
+
+    AntenneService::getCoverageByOperator(operator_id, minLat, minLon, maxLat, maxLon, 
+        [callback](const Json::Value& geojson, const std::string& err) {
+            if (err.empty()) {
+                auto resp = HttpResponse::newHttpJsonResponse(geojson);
+                resp->addHeader("Content-Type", "application/geo+json");
+                // On ajoute un header pour indiquer au front de mettre en cache ce calcul lourd
+                resp->addHeader("Cache-Control", "public, max-age=300"); 
+                callback(resp);
+            } else {
+                auto errorDetails = ErrorHandler::analyzePostgresError(err);
+                ErrorHandler::logError("AntenneController::getCoverage", errorDetails);
+                auto resp = ErrorHandler::createErrorResponse(errorDetails);
+                callback(resp);
+            }
+        }
+    );
+}
+
+// ============================================================================
+// NOUVEAU : GET VORONOI DIAGRAM
+// ============================================================================
+void AntenneController::getVoronoi(const HttpRequestPtr& req, 
+                                   std::function<void (const HttpResponsePtr &)> &&callback) {
+    AntenneService::getVoronoiDiagram([callback](const Json::Value& geojson, const std::string& err) {
+        if (err.empty()) {
+            auto resp = HttpResponse::newHttpJsonResponse(geojson);
+            resp->addHeader("Content-Type", "application/geo+json");
+            callback(resp);
+        } else {
+            auto resp = HttpResponse::newHttpResponse();
+            resp->setStatusCode(k500InternalServerError);
+            resp->setBody(err);
+            callback(resp);
+        }
+    });
+}
