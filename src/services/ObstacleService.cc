@@ -354,3 +354,101 @@ void ObstacleService::getAllGeoJSONPaginated(
         }
     );
 }
+
+// ============================================================================
+// GET OBSTACLES BY BOUNDING BOX
+// ============================================================================
+void ObstacleService::getByBoundingBox(double minLon, double minLat, double maxLon, double maxLat, const std::optional<std::string>& type, const std::function<void(const Json::Value&, const std::string&)>& callback) {
+    auto dbClient = drogon::app().getDbClient();
+
+    // Construct SQL query
+    std::string sql = R"(SELECT jsonb_build_object(
+        'type', 'FeatureCollection',
+        'features', jsonb_agg(jsonb_build_object(
+            'type', 'Feature',
+            'geometry', ST_AsGeoJSON(t.geom)::jsonb,
+            'properties', jsonb_build_object(
+                'id', t.id,
+                'type', t.type,
+                'geom_type', t.geom_type
+            )
+        ))
+    ) AS geojson
+    FROM obstacle t
+    WHERE ST_Intersects(t.geom, ST_MakeEnvelope($1, $2, $3, $4, 4326)))";
+
+    if (type.has_value()) {
+        sql += " AND t.type = $5";
+        dbClient->execSqlAsync(
+            sql,
+            [callback](const drogon::orm::Result& result) {
+                        if (!result.empty()) {
+                            const auto& row = result[0];
+                            std::string geoString = row["geojson"].as<std::string>();
+                            Json::CharReaderBuilder builder;
+                            std::unique_ptr<Json::CharReader> reader(builder.newCharReader());
+                            Json::Value parsed;
+                            std::string errs;
+                            if (reader->parse(geoString.c_str(), geoString.c_str() + geoString.length(), &parsed, &errs)) {
+                                // Ensure 'features' is always an array (Postgres jsonb_agg returns null when no rows)
+                                if (parsed.isObject() && parsed["features"].isNull()) {
+                                    parsed["features"] = Json::Value(Json::arrayValue);
+                                }
+                                callback(parsed, "");
+                            } else {
+                                LOG_ERROR << "ObstacleService::getByBoundingBox - Failed to parse GeoJSON: " << errs;
+                                Json::Value emptyGeoJSON;
+                                emptyGeoJSON["type"] = "FeatureCollection";
+                                emptyGeoJSON["features"] = Json::Value(Json::arrayValue);
+                                callback(emptyGeoJSON, "");
+                            }
+                        } else {
+                            Json::Value emptyGeoJSON;
+                            emptyGeoJSON["type"] = "FeatureCollection";
+                            emptyGeoJSON["features"] = Json::Value(Json::arrayValue);
+                            callback(emptyGeoJSON, "");
+                        }
+            },
+            [callback](const drogon::orm::DrogonDbException& e) {
+                callback(Json::Value(), e.base().what());
+            },
+            minLon, minLat, maxLon, maxLat, type.value()
+        );
+    } else {
+        dbClient->execSqlAsync(
+            sql,
+            [callback](const drogon::orm::Result& result) {
+                        if (!result.empty()) {
+                    const auto& row = result[0];
+                    std::string geoString = row["geojson"].as<std::string>();
+                    Json::CharReaderBuilder builder;
+                    std::unique_ptr<Json::CharReader> reader(builder.newCharReader());
+                    Json::Value parsed;
+                    std::string errs;
+                    if (reader->parse(geoString.c_str(), geoString.c_str() + geoString.length(), &parsed, &errs)) {
+                                // Ensure 'features' is an array (not null) for GeoJSON compliance
+                                if (parsed.isObject() && parsed["features"].isNull()) {
+                                    parsed["features"] = Json::Value(Json::arrayValue);
+                                }
+                                callback(parsed, "");
+                    } else {
+                        LOG_ERROR << "ObstacleService::getByBoundingBox - Failed to parse GeoJSON: " << errs;
+                        Json::Value emptyGeoJSON;
+                        emptyGeoJSON["type"] = "FeatureCollection";
+                        emptyGeoJSON["features"] = Json::Value(Json::arrayValue);
+                        callback(emptyGeoJSON, "");
+                    }
+                } else {
+                    Json::Value emptyGeoJSON;
+                    emptyGeoJSON["type"] = "FeatureCollection";
+                    emptyGeoJSON["features"] = Json::Value(Json::arrayValue);
+                    callback(emptyGeoJSON, "");
+                }
+            },
+            [callback](const drogon::orm::DrogonDbException& e) {
+                callback(Json::Value(), e.base().what());
+            },
+            minLon, minLat, maxLon, maxLat
+        );
+    }
+}

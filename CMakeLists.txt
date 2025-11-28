@@ -14,10 +14,10 @@ include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/src/controllers
     ${CMAKE_CURRENT_SOURCE_DIR}/src/utils
     ${CMAKE_CURRENT_SOURCE_DIR}/src/filters
-   
+    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/json/include
+    ${Drogon_INCLUDE_DIRS}
 )
 
-# Trouve récursivement tous les fichiers .cc et .cpp dans src/
 file(GLOB_RECURSE SRC_FILES "src/*.cc" "src/*.cpp")
 
 add_executable(${PROJECT_NAME} ${SRC_FILES})

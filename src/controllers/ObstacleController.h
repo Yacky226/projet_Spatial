@@ -14,6 +14,7 @@ public:
         ADD_METHOD_TO(ObstacleController::update, "/api/obstacles/{1}", Put);
         ADD_METHOD_TO(ObstacleController::remove, "/api/obstacles/{1}", Delete);  
         ADD_METHOD_TO(ObstacleController::getGeoJSON, "/api/obstacles/geojson", Get);
+        ADD_METHOD_TO(ObstacleController::getByBoundingBox, "/api/obstacles/bbox", Get);
     METHOD_LIST_END
 
     void create(const HttpRequestPtr& req, std::function<void (const HttpResponsePtr &)> &&callback);
@@ -22,4 +23,5 @@ public:
     void update(const HttpRequestPtr& req, std::function<void (const HttpResponsePtr &)> &&callback, int id);
     void remove(const HttpRequestPtr& req, std::function<void (const HttpResponsePtr &)> &&callback, int id); 
     void getGeoJSON(const HttpRequestPtr& req, std::function<void (const HttpResponsePtr &)> &&callback);
+    void getByBoundingBox(const HttpRequestPtr& req, std::function<void (const HttpResponsePtr &)> &&callback);
 };
