@@ -26,4 +26,7 @@ public:
         int pageSize,
         std::function<void(const Json::Value&, const PaginationMeta&, const std::string&)> callback
     );
+    
+    // GET OBSTACLES BY BOUNDING BOX
+    static void getByBoundingBox(double minLon, double minLat, double maxLon, double maxLat, const std::optional<std::string>& type, const std::function<void(const Json::Value&, const std::string&)>& callback);
 };
