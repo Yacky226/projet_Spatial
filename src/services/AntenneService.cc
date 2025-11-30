@@ -795,7 +795,7 @@ void AntenneService::getCoverageByOperator(
 {
     auto client = app().getDbClient();
     
-    // Celui-ci effectue les opérations suivantes :
+    // Cette requête effectue les opérations suivantes :
     // 1. Filtre par opérateur et zone (BBox)
     // 2. Transforme chaque point en cercle de couverture (ST_Buffer sur geography pour la précision en mètres)
     // 3. Fusionne tous les cercles en une seule forme géométrique (ST_Union)
@@ -849,6 +849,7 @@ void AntenneService::getCoverageByOperator(
 // NOUVEAU : VORONOI DIAGRAM
 // ============================================================================
 void AntenneService::getVoronoiDiagram(
+    int operator_id,
     std::function<void(const Json::Value&, const std::string&)> callback) {
     
     auto client = app().getDbClient();
@@ -858,27 +859,29 @@ void AntenneService::getVoronoiDiagram(
             SELECT id, geom 
             FROM antenna 
             WHERE status = 'active'
+            AND ($1 = 0 OR operator_id = $1)  -- FILTRE AJOUTÉ ICI
         ),
         voronoi_cells AS (
             SELECT 
-                (ST_Dump(ST_VoronoiPolygons(ST_Collect(geom)))).geom as cell,
-                id
+                (ST_Dump(ST_VoronoiPolygons(ST_Collect(geom)))).geom as cell
             FROM active_antennas
         ),
         attributed_cells AS (
             SELECT 
                 a.id as antenna_id,
-                a.geom as antenna_location,
                 v.cell as voronoi_polygon
             FROM active_antennas a
             JOIN voronoi_cells v ON ST_Contains(v.cell, a.geom)
         )
         SELECT json_build_object(
             'type', 'FeatureCollection',
+            'metadata', json_build_object(
+                'operator_id', $1,
+                'generated_at', NOW()
+            ),
             'features', json_agg(
                 json_build_object(
                     'type', 'Feature',
-                    'id', antenna_id,
                     'geometry', ST_AsGeoJSON(voronoi_polygon)::json,
                     'properties', json_build_object(
                         'antenna_id', antenna_id,
@@ -893,17 +896,33 @@ void AntenneService::getVoronoiDiagram(
     client->execSqlAsync(sql,
         [callback](const Result& r) {
             if (!r.empty()) {
+                // Si aucune antenne n'est trouvée (ex: ID opérateur invalide), geojson peut être null
+                if (r[0]["geojson"].isNull()) {
+                    Json::Value empty;
+                    empty["type"] = "FeatureCollection";
+                    empty["features"] = Json::arrayValue;
+                    callback(empty, "");
+                    return;
+                }
+
                 std::string geojsonStr = r[0]["geojson"].as<std::string>();
                 Json::Value geojson;
-                Json::Reader reader;
-                reader.parse(geojsonStr, geojson);
-                callback(geojson, "");
+                Json::CharReaderBuilder builder;
+                std::unique_ptr<Json::CharReader> reader(builder.newCharReader());
+                std::string errs;
+
+                if (reader->parse(geojsonStr.c_str(), geojsonStr.c_str() + geojsonStr.length(), &geojson, &errs)) {
+                    callback(geojson, "");
+                } else {
+                    callback(Json::Value(), "JSON parsing error");
+                }
             } else {
-                callback(Json::Value(), "No antennas found");
+                callback(Json::Value(), "Database error");
             }
         },
         [callback](const DrogonDbException& e) {
             callback(Json::Value(), e.base().what());
-        }
+        },
+        operator_id // On passe le paramètre ici
     );
 }

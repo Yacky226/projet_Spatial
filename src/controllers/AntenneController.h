@@ -24,7 +24,7 @@ public:
        ADD_METHOD_TO(AntenneController::getCoverage, "/api/coverage/operator/{1}?minLat={2}&minLon={3}&maxLat={4}&maxLon={5}", Get);
         
         // NOUVEAU : Voronoi diagram
-        ADD_METHOD_TO(AntenneController::getVoronoi, "/api/antennes/voronoi", Get);
+     ADD_METHOD_TO(AntenneController::getVoronoi, "/api/antennes/voronoi", Get);
     METHOD_LIST_END
 
 
@@ -48,6 +48,6 @@ public:
     
    void getCoverage(const HttpRequestPtr& req, std::function<void (const HttpResponsePtr &)> &&callback,
                      int operator_id, double minLat, double minLon, double maxLat, double maxLon);
-    void getVoronoi(const HttpRequestPtr& req, std::function<void (const HttpResponsePtr &)> &&callback);
+   void getVoronoi(const HttpRequestPtr& req, std::function<void (const HttpResponsePtr &)> &&callback);
                               
 };

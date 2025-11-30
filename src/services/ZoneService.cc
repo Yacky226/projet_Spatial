@@ -10,11 +10,8 @@ void ZoneService::create(const ZoneModel &z, std::function<void(const std::strin
     std::string sql = "INSERT INTO zone (name, type, density, geom, parent_id) "
                       "VALUES ($1, $2::zone_type, $3, ST_GeomFromText($4, 4326), $5)";
 
-    // Astuce : Si parent_id est 0, on envoie nullptr pour que SQL mette NULL
+    //  Si parent_id est 0, on envoie nullptr pour que SQL mette NULL
     // Mais Drogon gère mal nullptr direct, on envoie NULL via conditionnel SQL ou on laisse 0 si la FK l'autorise. 
-    // Ici on suppose que la DB accepte NULL. Pour simplifier en C++ sans std::optional, on envoie z.parent_id si > 0, sinon NULL est géré par la logique SQL.
-    // Pour faire simple ici : on utilise une requête dynamique ou on accepte NULL.
-    // Note: Pour simplifier ce code exemple, on insère NULL si parent_id == 0 via SQL CASE ou similaire est complexe.
     // On va assumer que l'utilisateur ne met pas de parent_id pour l'instant ou envoie un ID valide.
     
     client->execSqlAsync(sql, 

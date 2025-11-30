@@ -10,6 +10,7 @@ public:
         ADD_METHOD_TO(CoverageController::getAntennaCoverage, "/api/coverage/antenna/{1}", Get);
         ADD_METHOD_TO(CoverageController::getWhiteZones, "/api/coverage/white-zones/{1}", Get);
         ADD_METHOD_TO(CoverageController::getGlobalStats, "/api/coverage/stats", Get);
+        ADD_METHOD_TO(CoverageController::getWhiteZonesByOperator, "/api/coverage/white-zones/{1}/operator/{2}", Get);
     METHOD_LIST_END
 
     void getAntennaCoverage(const HttpRequestPtr& req, 
@@ -22,4 +23,9 @@ public:
                        
     void getGlobalStats(const HttpRequestPtr& req, 
                         std::function<void(const HttpResponsePtr&)>&& callback);
+    
+    void getWhiteZonesByOperator(const HttpRequestPtr& req,
+                                 std::function<void(const HttpResponsePtr&)>&& callback,
+                                 int zone_id,
+                                 int operator_id);
 };

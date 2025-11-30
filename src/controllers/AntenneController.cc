@@ -693,20 +693,52 @@ void AntenneController::getCoverage(const HttpRequestPtr& req,
 }
 
 // ============================================================================
-// NOUVEAU : GET VORONOI DIAGRAM
+// NOUVEAU : GET VORONOI DIAGRAM (avec filtre operator_id optionnel)
 // ============================================================================
 void AntenneController::getVoronoi(const HttpRequestPtr& req, 
                                    std::function<void (const HttpResponsePtr &)> &&callback) {
-    AntenneService::getVoronoiDiagram([callback](const Json::Value& geojson, const std::string& err) {
-        if (err.empty()) {
-            auto resp = HttpResponse::newHttpJsonResponse(geojson);
-            resp->addHeader("Content-Type", "application/geo+json");
+    
+    // Récupérer le paramètre operator_id (optionnel)
+    int operator_id = 0;  // 0 = tous les opérateurs
+    
+    auto operatorParam = req->getParameter("operator_id");
+    if (!operatorParam.empty()) {
+        try {
+            operator_id = std::stoi(operatorParam);
+            
+            // Validation
+            if (operator_id < 0) {
+                auto resp = ErrorHandler::createGenericErrorResponse(
+                    "operator_id must be a positive integer or 0 (for all operators)", 
+                    k400BadRequest
+                );
+                callback(resp);
+                return;
+            }
+        } catch (const std::exception& e) {
+            auto resp = ErrorHandler::createGenericErrorResponse(
+                "Invalid operator_id parameter: must be an integer", 
+                k400BadRequest
+            );
             callback(resp);
-        } else {
-            auto resp = HttpResponse::newHttpResponse();
-            resp->setStatusCode(k500InternalServerError);
-            resp->setBody(err);
-            callback(resp);
+            return;
         }
-    });
+    }
+    
+    // Appeler le service avec le paramètre
+    AntenneService::getVoronoiDiagram(operator_id, 
+        [callback](const Json::Value& geojson, const std::string& err) {
+            if (err.empty()) {
+                auto resp = HttpResponse::newHttpJsonResponse(geojson);
+                resp->addHeader("Content-Type", "application/geo+json");
+                resp->addHeader("Cache-Control", "public, max-age=300"); // Cache 5 min
+                callback(resp);
+            } else {
+                auto errorDetails = ErrorHandler::analyzePostgresError(err);
+                ErrorHandler::logError("AntenneController::getVoronoi", errorDetails);
+                auto resp = ErrorHandler::createErrorResponse(errorDetails);
+                callback(resp);
+            }
+        }
+    );
 }

@@ -31,9 +31,9 @@
       "rdbms": "postgresql",
       "host": "host.docker.internal",
       "port": 5432,
-      "dbname": "NetworkCoverageOptimization",
-      "user": "postgres",
-      "passwd": "postgres",
+      "dbname": "projet_spatial",
+      "user": "yacouba",
+      "passwd": "yacouba",
       "is_fast": false
     }
   ]

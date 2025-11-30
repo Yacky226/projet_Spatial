@@ -1,4 +1,5 @@
 #include "CoverageController.h"
+#include "../utils/ErrorHandler.h"
 
 using namespace drogon;
 using namespace drogon::orm;
@@ -23,22 +24,65 @@ void CoverageController::getAntennaCoverage(const HttpRequestPtr& req,
     );
 }
 
-// 2. Récupération des zones blanches (GeoJSON)
-void CoverageController::getWhiteZones(const HttpRequestPtr& req,
-                                     std::function<void(const HttpResponsePtr&)>&& callback,
-                                     int zone_id) {
-    CoverageService::getWhiteZones(zone_id, [callback](const Json::Value& result, const std::string& err) {
-        if (err.empty()) {
-            auto resp = HttpResponse::newHttpJsonResponse(result);
-            resp->addHeader("Content-Type", "application/geo+json");
-            callback(resp);
-        } else {
-            auto resp = HttpResponse::newHttpResponse();
-            resp->setStatusCode(k500InternalServerError);
-            resp->setBody(err);
-            callback(resp);
+// ============================================================================
+// ZONES BLANCHES GLOBALES (tous opérateurs)
+// ============================================================================
+void CoverageController::getWhiteZones(
+    const HttpRequestPtr& req,
+    std::function<void(const HttpResponsePtr&)>&& callback,
+    int zone_id) {
+    
+    CoverageService::getWhiteZonesAdvanced(zone_id, std::nullopt,
+        [callback](const Json::Value& result, const std::string& error) {
+            if (error.empty()) {
+                auto resp = HttpResponse::newHttpJsonResponse(result);
+                resp->addHeader("Content-Type", "application/geo+json");
+                resp->addHeader("Cache-Control", "public, max-age=300");
+                callback(resp);
+            } else {
+                auto errorDetails = ErrorHandler::analyzePostgresError(error);
+                ErrorHandler::logError("CoverageController::getWhiteZones", errorDetails);
+                auto resp = ErrorHandler::createErrorResponse(errorDetails);
+                callback(resp);
+            }
         }
-    });
+    );
+}
+
+// ============================================================================
+// ZONES BLANCHES PAR OPÉRATEUR
+// ============================================================================
+void CoverageController::getWhiteZonesByOperator(
+    const HttpRequestPtr& req,
+    std::function<void(const HttpResponsePtr&)>&& callback,
+    int zone_id,
+    int operator_id) {
+    
+    // Validation de l'operator_id
+    if (operator_id <= 0) {
+        auto resp = ErrorHandler::createGenericErrorResponse(
+            "Invalid operator_id: must be a positive integer",
+            k400BadRequest
+        );
+        callback(resp);
+        return;
+    }
+    
+    CoverageService::getWhiteZonesAdvanced(zone_id, operator_id,
+        [callback](const Json::Value& result, const std::string& error) {
+            if (error.empty()) {
+                auto resp = HttpResponse::newHttpJsonResponse(result);
+                resp->addHeader("Content-Type", "application/geo+json");
+                resp->addHeader("Cache-Control", "public, max-age=300");
+                callback(resp);
+            } else {
+                auto errorDetails = ErrorHandler::analyzePostgresError(error);
+                ErrorHandler::logError("CoverageController::getWhiteZonesByOperator", errorDetails);
+                auto resp = ErrorHandler::createErrorResponse(errorDetails);
+                callback(resp);
+            }
+        }
+    );
 }
 
 // 3. Statistiques Globales

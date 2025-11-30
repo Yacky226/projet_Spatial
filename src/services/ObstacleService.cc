@@ -192,7 +192,7 @@ void ObstacleService::getAllGeoJSON(std::function<void(const Json::Value&, const
 }
 
 // ============================================================================
-// 7. READ ALL PAGINATED (FIXED)
+// 7. READ ALL PAGINATED 
 // ============================================================================
 void ObstacleService::getAllPaginated(
     int page, 
@@ -263,7 +263,7 @@ void ObstacleService::getAllPaginated(
 }
 
 // ============================================================================
-// 8. GET ALL GEOJSON PAGINATED (FIXED)
+// 8. GET ALL GEOJSON PAGINATED
 // ============================================================================
 void ObstacleService::getAllGeoJSONPaginated(
     int page,

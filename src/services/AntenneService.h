@@ -64,6 +64,8 @@ public:
     static void getCoverageByOperator(int operator_id, double minLat, double minLon, double maxLat, double maxLon,
                                      std::function<void(const Json::Value&, const std::string&)> callback);
                                     
-    static void getVoronoiDiagram(
-        std::function<void(const Json::Value&, const std::string&)> callback);
+     static void getVoronoiDiagram(
+        int operator_id,
+        std::function<void(const Json::Value&, const std::string&)> callback
+    );
 };
