@@ -11,29 +11,88 @@ void OptimizationService::optimizeGreedy(const OptimizationRequest& req,
                                          std::function<void(const std::vector<OptimizationResult>&, const std::string&)> callback) {
     auto client = app().getDbClient();
 
-    // ALGORITHME SQL "MONTE CARLO" :
-    // 1. On sélectionne la géométrie de la zone cible.
-    // 2. ST_GeneratePoints : On génère 100 points aléatoires DANS la zone.
-    // 3. LATERAL JOIN : Pour CHAQUE point candidat, on simule une couverture.
-    // 4. ST_Intersection : On calcule la surface couverte par ce candidat.
-    // 5. On multiplie par la densité de la zone pour avoir la population estimée.
-    // 6. On trie par population décroissante et on garde le top N.
+    // ALGORITHME AMÉLIORÉ :
+    // 1. Calculer la couverture ACTUELLE de l'opérateur
+    // 2. Identifier les zones NON COUVERTES par cet opérateur
+    // 3. Générer des points candidats DANS les zones blanches
+    // 4. Calculer le gain de couverture pour chaque candidat
 
     std::string sql = R"(
         WITH target_zone AS (
-            SELECT geom, density FROM zone WHERE id = $1
+            SELECT 
+                id,
+                geom, 
+                density,
+                ST_Area(geom::geography) / 1000000.0 as total_area_km2
+            FROM zone 
+            WHERE id = $1
         ),
+        -- Couverture actuelle de l'opérateur dans cette zone
+        current_operator_coverage AS (
+            SELECT ST_Union(
+                ST_Buffer(a.geom::geography, a.coverage_radius)::geometry
+            ) as covered_area
+            FROM antenna a, target_zone z
+            WHERE a.operator_id = $2
+              AND a.status = 'active'
+              AND ST_DWithin(a.geom::geography, z.geom::geography, a.coverage_radius)
+        ),
+        -- Zones blanches (non couvertes par CET opérateur)
+        white_zones AS (
+            SELECT 
+                ST_Difference(
+                    z.geom,
+                    COALESCE(c.covered_area, 'GEOMETRYCOLLECTION EMPTY'::geometry)
+                ) as uncovered_geom,
+                z.density,
+                z.total_area_km2
+            FROM target_zone z
+            LEFT JOIN current_operator_coverage c ON true
+        ),
+        -- Générer des points candidats UNIQUEMENT dans les zones blanches
         candidates AS (
-            SELECT (ST_Dump(ST_GeneratePoints(geom, 100))).geom as pt_geom 
-            FROM target_zone
+            SELECT 
+                (ST_Dump(
+                    ST_GeneratePoints(
+                        CASE 
+                            WHEN ST_IsEmpty(uncovered_geom) THEN (SELECT geom FROM target_zone)
+                            ELSE uncovered_geom
+                        END,
+                        200  -- Plus de points pour meilleures suggestions
+                    )
+                )).geom as pt_geom,
+                density,
+                ST_Area(uncovered_geom::geography) / 1000000.0 as white_zone_area_km2
+            FROM white_zones
+            WHERE NOT ST_IsEmpty(uncovered_geom)
         )
         SELECT 
             ST_X(pt_geom) as lon,
             ST_Y(pt_geom) as lat,
-            (ST_Area(ST_Intersection(target_zone.geom, ST_Buffer(pt_geom::geography, $2)::geometry)::geography) / 1000000.0) * target_zone.density as pop_covered
-        FROM candidates, target_zone
-        ORDER BY pop_covered DESC
-        LIMIT $3
+            -- Population couverte par ce nouveau point
+            (ST_Area(
+                ST_Intersection(
+                    (SELECT geom FROM target_zone),
+                    ST_Buffer(pt_geom::geography, $3)::geometry
+                )::geography
+            ) / 1000000.0) * density as pop_covered,
+            -- Surface de zone blanche qui sera couverte
+            (ST_Area(
+                ST_Intersection(
+                    (SELECT uncovered_geom FROM white_zones),
+                    ST_Buffer(pt_geom::geography, $3)::geometry
+                )::geography
+            ) / 1000000.0) as white_zone_covered_km2,
+            -- Pourcentage d'amélioration de couverture
+            ((ST_Area(
+                ST_Intersection(
+                    (SELECT uncovered_geom FROM white_zones),
+                    ST_Buffer(pt_geom::geography, $3)::geometry
+                )::geography
+            ) / 1000000.0) / white_zone_area_km2) * 100 as coverage_improvement_percent
+        FROM candidates
+        ORDER BY white_zone_covered_km2 DESC, pop_covered DESC
+        LIMIT $4
     )";
 
     client->execSqlAsync(
@@ -45,16 +104,21 @@ void OptimizationService::optimizeGreedy(const OptimizationRequest& req,
                 res.longitude = row["lon"].as<double>();
                 res.latitude = row["lat"].as<double>();
                 res.estimated_population = row["pop_covered"].as<double>();
-                // Score simple basé sur la population (normalisation possible)
-                res.score = static_cast<int>(res.estimated_population); 
+                res.uncovered_area_km2 = row["white_zone_covered_km2"].as<double>();
+                res.coverage_improvement = row["coverage_improvement_percent"].as<double>();
+                
+                // Score basé sur l'amélioration de la couverture
+                res.score = static_cast<int>(res.coverage_improvement * 10); 
                 results.push_back(res);
             }
             callback(results, "");
         },
         [callback](const DrogonDbException &e) {
+            LOG_ERROR << "OptimizationService::optimizeGreedy - Error: " << e.base().what();
             callback({}, e.base().what());
         },
         req.zone_id,
+        req.operator_id,  // 🆕 Filtrer par opérateur
         req.radius,
         req.antennas_count
     );
@@ -67,9 +131,9 @@ void OptimizationService::optimizeKMeans(const OptimizationRequest& req,
                                          std::function<void(const std::vector<OptimizationResult>&, const std::string&)> callback) {
     auto client = app().getDbClient();
 
-    // Étape 1 : Récupérer tous les points de population dans la zone
+    // Étape 1 : Récupérer les zones blanches de l'opérateur et générer des points
     std::string sql = R"(
-        WITH zone_data AS (
+        WITH target_zone AS (
             SELECT 
                 id,
                 geom,
@@ -78,22 +142,46 @@ void OptimizationService::optimizeKMeans(const OptimizationRequest& req,
             FROM zone 
             WHERE id = $1
         ),
-        -- Générer une grille de points pondérés par la densité
+        -- Couverture actuelle de l'opérateur
+        operator_coverage AS (
+            SELECT ST_Union(
+                ST_Buffer(a.geom::geography, a.coverage_radius)::geometry
+            ) as covered_area
+            FROM antenna a, target_zone z
+            WHERE a.operator_id = $2
+              AND a.status = 'active'
+              AND ST_DWithin(a.geom::geography, z.geom::geography, a.coverage_radius)
+        ),
+        -- Zones blanches de cet opérateur
+        white_zones AS (
+            SELECT 
+                ST_Difference(
+                    z.geom,
+                    COALESCE(c.covered_area, 'GEOMETRYCOLLECTION EMPTY'::geometry)
+                ) as uncovered_geom,
+                z.density
+            FROM target_zone z
+            LEFT JOIN operator_coverage c ON true
+        ),
+        -- Générer des points pondérés dans les zones blanches
         population_points AS (
             SELECT 
                 (ST_DumpPoints(
                     ST_GeneratePoints(
-                        z.geom, 
-                        GREATEST(100, FLOOR(z.density * z.area_km2 / 100))::int
+                        CASE 
+                            WHEN ST_IsEmpty(uncovered_geom) THEN (SELECT geom FROM target_zone)
+                            ELSE uncovered_geom
+                        END,
+                        GREATEST(200, FLOOR(density * 10))::int
                     )
                 )).geom as point,
-                z.density
-            FROM zone_data z
+                density as weight
+            FROM white_zones
         )
         SELECT 
             ST_X(point) as lon,
             ST_Y(point) as lat,
-            density as weight
+            weight
         FROM population_points
         ORDER BY RANDOM()
         LIMIT 1000
@@ -102,7 +190,7 @@ void OptimizationService::optimizeKMeans(const OptimizationRequest& req,
     client->execSqlAsync(sql,
         [callback, req, client](const Result& r) {
             if (r.empty()) {
-                callback({}, "Zone not found or empty");
+                callback({}, "Zone not found or already 100% covered by this operator");
                 return;
             }
 
@@ -209,7 +297,7 @@ void OptimizationService::optimizeKMeans(const OptimizationRequest& req,
                 }
             }
             
-            // Étape 3 : Calculer la population couverte par chaque centroïde
+            // Étape 3 : Calculer la couverture en tenant compte de l'opérateur existant
             std::string coverageSQL = R"(
                 WITH antenna_coverage AS (
                     SELECT 
@@ -218,41 +306,64 @@ void OptimizationService::optimizeKMeans(const OptimizationRequest& req,
                         ST_Buffer(
                             ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography,
                             $3
-                        )::geometry as coverage
+                        )::geometry as new_coverage
                 ),
-                zone_intersection AS (
+                operator_white_zones AS (
                     SELECT 
                         z.density,
-                        ST_Area(
-                            ST_Intersection(z.geom, ac.coverage)::geography
-                        ) / 1000000.0 as covered_area_km2
-                    FROM zone z, antenna_coverage ac
-                    WHERE z.id = $4 AND ST_Intersects(z.geom, ac.coverage)
+                        ST_Difference(
+                            z.geom,
+                            COALESCE(
+                                (SELECT ST_Union(ST_Buffer(a.geom::geography, a.coverage_radius)::geometry)
+                                 FROM antenna a
+                                 WHERE a.operator_id = $5 AND a.status = 'active'),
+                                'GEOMETRYCOLLECTION EMPTY'::geometry
+                            )
+                        ) as uncovered
+                    FROM zone z
+                    WHERE z.id = $4
                 )
                 SELECT 
-                    COALESCE(SUM(density * covered_area_km2), 0)::float as population
-                FROM zone_intersection
+                    COALESCE(
+                        SUM(
+                            (ST_Area(
+                                ST_Intersection(w.uncovered, ac.new_coverage)::geography
+                            ) / 1000000.0) * w.density
+                        ), 
+                        0
+                    )::float as population,
+                    COALESCE(
+                        SUM(
+                            ST_Area(
+                                ST_Intersection(w.uncovered, ac.new_coverage)::geography
+                            ) / 1000000.0
+                        ),
+                        0
+                    )::float as white_zone_covered_km2
+                FROM operator_white_zones w, antenna_coverage ac
             )";
             
             std::vector<OptimizationResult> results;
             std::atomic<int> completed(0);
+            double total_white_zone_area = 0.0;
             
             for (int k = 0; k < K; k++) {
                 client->execSqlAsync(coverageSQL,
-                    [callback, &results, &completed, K, centroids, k](const Result& r) {
+                    [callback, &results, &completed, K, centroids, k, &total_white_zone_area](const Result& r) {
                         OptimizationResult res;
                         res.latitude = centroids[k].lat;
                         res.longitude = centroids[k].lon;
                         res.estimated_population = r[0]["population"].as<double>();
+                        res.uncovered_area_km2 = r[0]["white_zone_covered_km2"].as<double>();
+                        res.coverage_improvement = (res.uncovered_area_km2 / total_white_zone_area) * 100;
                         res.score = static_cast<int>(res.estimated_population);
                         
                         results.push_back(res);
                         
                         if (++completed == K) {
-                            // Trier par population décroissante
                             std::sort(results.begin(), results.end(), 
                                 [](const OptimizationResult& a, const OptimizationResult& b) {
-                                    return a.estimated_population > b.estimated_population;
+                                    return a.uncovered_area_km2 > b.uncovered_area_km2;
                                 });
                             callback(results, "");
                         }
@@ -263,13 +374,16 @@ void OptimizationService::optimizeKMeans(const OptimizationRequest& req,
                     centroids[k].lat,
                     centroids[k].lon,
                     req.radius,
-                    req.zone_id
+                    req.zone_id,
+                    req.operator_id  // 🆕 Paramètre opérateur
                 );
             }
         },
         [callback](const DrogonDbException& e) {
+            LOG_ERROR << "OptimizationService::optimizeKMeans - Error: " << e.base().what();
             callback({}, e.base().what());
         },
-        req.zone_id
+        req.zone_id,
+        req.operator_id  // 🆕 Paramètre opérateur
     );
 }
