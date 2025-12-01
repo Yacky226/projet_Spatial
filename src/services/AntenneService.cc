@@ -1114,3 +1114,151 @@ void AntenneService::getClusteredAntennas(
         executeQuery(minLon, minLat, maxLon, maxLat);
     }
 }
+
+// ============================================================================
+// 12. GET SIMPLIFIED COVERAGE (Ultra-optimisé + Filtres operator/technology)
+// ============================================================================
+void AntenneService::getSimplifiedCoverage(
+    double minLat, double minLon, double maxLat, double maxLon, int zoom,
+    int operator_id, const std::string& technology,
+    std::function<void(const Json::Value&, const std::string&)> callback)
+{
+    auto client = app().getDbClient();
+    
+    // Calcul du seuil de simplification basé sur le zoom
+    // Zoom bas = simplification agressive, zoom haut = plus de détails
+    double tolerance;
+    if (zoom <= 6) {
+        tolerance = 0.05;  // ~5.5 km - Simplification maximale
+    } else if (zoom <= 8) {
+        tolerance = 0.02;  // ~2.2 km
+    } else if (zoom <= 10) {
+        tolerance = 0.01;  // ~1.1 km
+    } else if (zoom <= 12) {
+        tolerance = 0.005; // ~550 m
+    } else {
+        tolerance = 0.001; // ~111 m - Détails fins
+    }
+    
+    // Construction des clauses WHERE pour les filtres
+    std::vector<std::string> whereClauses;
+    whereClauses.push_back("status = 'active'");
+    whereClauses.push_back("ST_Intersects(geom, ST_MakeEnvelope($1, $2, $3, $4, 4326))");
+    
+    int paramIndex = 7; // $1-$6 déjà utilisés
+    std::string operatorFilter, techFilter;
+    
+    if (operator_id > 0) {
+        whereClauses.push_back("operator_id = $" + std::to_string(paramIndex++));
+        operatorFilter = std::to_string(operator_id);
+    }
+    if (!technology.empty()) {
+        whereClauses.push_back("technology = $" + std::to_string(paramIndex++) + "::technology_type");
+        techFilter = technology;
+    }
+    
+    std::string whereClause = whereClauses[0];
+    for (size_t i = 1; i < whereClauses.size(); i++) {
+        whereClause += " AND " + whereClauses[i];
+    }
+    
+    // Stratégie d'optimisation :
+    // 1. ST_Buffer crée les cercles de couverture
+    // 2. ST_Union fusionne tous les cercles en 1 seule géométrie
+    // 3. ST_Simplify réduit drastiquement les points (Douglas-Peucker)
+    // 4. ST_MakeValid corrige les auto-intersections éventuelles
+    // 5. Filtre par bbox pour limiter la zone calculée
+    // 6. Filtres optionnels operator_id et technology
+    
+    std::string sql = R"(
+        WITH coverage_raw AS (
+            SELECT ST_Union(
+                ST_Buffer(geom::geography, coverage_radius)::geometry
+            ) as geom
+            FROM antenna
+            WHERE )" + whereClause + R"(
+        ),
+        coverage_simplified AS (
+            SELECT ST_MakeValid(
+                ST_Simplify(geom, $5)
+            ) as geom
+            FROM coverage_raw
+            WHERE geom IS NOT NULL
+        )
+        SELECT 
+            json_build_object(
+                'type', 'FeatureCollection',
+                'features', COALESCE(
+                    json_agg(
+                        json_build_object(
+                            'type', 'Feature',
+                            'geometry', ST_AsGeoJSON(geom)::json,
+                            'properties', json_build_object(
+                                'type', 'coverage',
+                                'zoom', $6::integer,
+                                'tolerance', $5::double precision
+                            )
+                        )
+                    ),
+                    '[]'::json
+                ),
+                'metadata', json_build_object(
+                    'zoom', $6::integer,
+                    'simplification_tolerance', $5::double precision,
+                    'bbox', json_build_object(
+                        'minLon', $1, 'minLat', $2,
+                        'maxLon', $3, 'maxLat', $4
+                    )
+                )
+            ) as geojson
+        FROM coverage_simplified
+    )";
+    
+    // Exécution avec les bons paramètres selon les filtres
+    auto executeQuery = [&](auto&&... params) {
+        client->execSqlAsync(sql,
+            [callback, zoom](const Result &r) {
+                if (!r.empty() && !r[0]["geojson"].isNull()) {
+                    std::string jsonStr = r[0]["geojson"].as<std::string>();
+                    Json::Value result;
+                    Json::CharReaderBuilder builder;
+                    std::unique_ptr<Json::CharReader> reader(builder.newCharReader());
+                    std::string errs;
+                    
+                    if (reader->parse(jsonStr.c_str(), jsonStr.c_str() + jsonStr.length(), &result, &errs)) {
+                        LOG_INFO << "✅ Simplified coverage generated for zoom " << zoom;
+                        callback(result, "");
+                    } else {
+                        auto errorDetails = ErrorHandler::analyzePostgresError("Failed to parse coverage GeoJSON");
+                        ErrorHandler::logError("AntenneService::getSimplifiedCoverage", errorDetails);
+                        callback(Json::Value(), errorDetails.userMessage);
+                    }
+                } else {
+                    // Pas de couverture dans cette bbox
+                    Json::Value emptyCollection;
+                    emptyCollection["type"] = "FeatureCollection";
+                    emptyCollection["features"] = Json::Value(Json::arrayValue);
+                    emptyCollection["metadata"]["zoom"] = zoom;
+                    callback(emptyCollection, "");
+                }
+            },
+            [callback](const DrogonDbException& e) {
+                auto errorDetails = ErrorHandler::analyzePostgresError(e.base().what());
+                ErrorHandler::logError("AntenneService::getSimplifiedCoverage", errorDetails);
+                callback(Json::Value(), errorDetails.userMessage);
+            },
+            std::forward<decltype(params)>(params)...
+        );
+    };
+    
+    // Appeler avec les bons paramètres selon filtres
+    if (operator_id > 0 && !technology.empty()) {
+        executeQuery(minLon, minLat, maxLon, maxLat, tolerance, zoom, operator_id, technology);
+    } else if (operator_id > 0) {
+        executeQuery(minLon, minLat, maxLon, maxLat, tolerance, zoom, operator_id);
+    } else if (!technology.empty()) {
+        executeQuery(minLon, minLat, maxLon, maxLat, tolerance, zoom, technology);
+    } else {
+        executeQuery(minLon, minLat, maxLon, maxLat, tolerance, zoom);
+    }
+}

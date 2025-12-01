@@ -141,7 +141,7 @@ void AntenneController::getAll(const HttpRequestPtr& req, std::function<void (co
                     
                     // Ajouter les métadonnées de pagination
                     response["pagination"] = meta.toJson();
-                    addPaginationLinks(response, meta, "/api/antennes");
+                    addPaginationLinks(response, meta, "/api/antennas");
                     
                     auto now = trantor::Date::now();
                     response["timestamp"] = now.toFormattedString(false);
@@ -435,7 +435,7 @@ void AntenneController::search(const HttpRequestPtr& req,
                     
                     response["pagination"] = meta.toJson();
                     
-                    std::string baseUrl = "/api/antennes/search?lat=" + std::to_string(lat) + 
+                    std::string baseUrl = "/api/antennas/search?lat=" + std::to_string(lat) + 
                                          "&lon=" + std::to_string(lon) + "&radius=" + std::to_string(radius);
                     addPaginationLinks(response, meta, baseUrl);
                     
@@ -501,7 +501,7 @@ void AntenneController::getGeoJSON(const HttpRequestPtr& req, std::function<void
                     Json::Value response = geojson;
                     response["pagination"] = meta.toJson();
                     
-                    addPaginationLinks(response, meta, "/api/antennes/geojson");
+                    addPaginationLinks(response, meta, "/api/antennas/geojson");
                     
                     auto resp = HttpResponse::newHttpJsonResponse(response);
                     resp->addHeader("Content-Type", "application/geo+json");
@@ -571,7 +571,7 @@ void AntenneController::getGeoJSONInRadius(const HttpRequestPtr& req,
                     Json::Value response = geojson;
                     response["pagination"] = meta.toJson();
                     
-                    std::string baseUrl = "/api/antennes/geojson/radius?lat=" + std::to_string(lat) + 
+                    std::string baseUrl = "/api/antennas/geojson/radius?lat=" + std::to_string(lat) + 
                                          "&lon=" + std::to_string(lon) + "&radius=" + std::to_string(radius);
                     addPaginationLinks(response, meta, baseUrl);
                     
@@ -851,6 +851,99 @@ void AntenneController::getClusteredAntennas(const HttpRequestPtr& req,
             } else {
                 auto errorDetails = ErrorHandler::analyzePostgresError(err);
                 ErrorHandler::logError("AntenneController::getClusteredAntennas", errorDetails);
+                auto resp = ErrorHandler::createErrorResponse(errorDetails);
+                callback(resp);
+            }
+        }
+    );
+}
+
+// ============================================================================
+// 10. GET SIMPLIFIED COVERAGE (Sprint 4 Performance - Navigation Fluide)
+// ============================================================================
+void AntenneController::getSimplifiedCoverage(
+    const HttpRequestPtr& req,
+    std::function<void(const HttpResponsePtr&)>&& callback,
+    double minLat, double minLon, double maxLat, double maxLon, int zoom)
+{
+    // ========== FILTRES OPTIONNELS ==========
+    int operator_id = req->getOptionalParameter<int>("operator_id").value_or(0);
+    std::string technology = req->getOptionalParameter<std::string>("technology").value_or("");
+    
+    LOG_INFO << "📡 GET /api/antennas/coverage/simplified - bbox: [" 
+             << minLat << "," << minLon << " → " << maxLat << "," << maxLon 
+             << "] zoom: " << zoom
+             << " operator: " << operator_id
+             << " tech: " << (technology.empty() ? "all" : technology);
+    
+    // ========== VALIDATION ==========
+    if (minLat >= maxLat || minLon >= maxLon) {
+        Json::Value error;
+        error["error"] = "Invalid bounding box: minLat must be < maxLat and minLon must be < maxLon";
+        error["details"]["minLat"] = minLat;
+        error["details"]["minLon"] = minLon;
+        error["details"]["maxLat"] = maxLat;
+        error["details"]["maxLon"] = maxLon;
+        
+        auto resp = HttpResponse::newHttpJsonResponse(error);
+        resp->setStatusCode(k400BadRequest);
+        callback(resp);
+        return;
+    }
+    
+    if (zoom < 0 || zoom > 18) {
+        Json::Value error;
+        error["error"] = "Zoom level must be between 0 and 18";
+        error["details"]["zoom"] = zoom;
+        
+        auto resp = HttpResponse::newHttpJsonResponse(error);
+        resp->setStatusCode(k400BadRequest);
+        callback(resp);
+        return;
+    }
+    
+    // ========== SPRINT 3: CACHE REDIS ==========
+    // Clé de cache : coverage simplifiée par bbox + zoom + filtres
+    std::string cacheKey = "coverage:simplified:bbox:" + 
+                          std::to_string(minLat) + ":" + std::to_string(minLon) + ":" + 
+                          std::to_string(maxLat) + ":" + std::to_string(maxLon) + 
+                          ":z:" + std::to_string(zoom) +
+                          ":op:" + std::to_string(operator_id) +
+                          ":tech:" + (technology.empty() ? "all" : technology);
+    
+    // Vérification cache (TTL 5min - stable car basé sur antennes actives)
+    auto cached = CacheService::getInstance().getJson(cacheKey);
+    if (cached) {
+        LOG_INFO << "✅ Coverage Cache HIT: " << cacheKey;
+        
+        auto resp = HttpResponse::newHttpJsonResponse(*cached);
+        resp->addHeader("Content-Type", "application/geo+json");
+        resp->addHeader("X-Cache", "HIT");
+        resp->addHeader("Cache-Control", "public, max-age=300"); // 5min
+        callback(resp);
+        return;
+    }
+    
+    LOG_INFO << "❌ Coverage Cache MISS: " << cacheKey;
+    
+    // ========== APPEL AU SERVICE ==========
+    AntenneService::getSimplifiedCoverage(
+        minLat, minLon, maxLat, maxLon, zoom, operator_id, technology,
+        [callback, cacheKey](const Json::Value& geojson, const std::string& err) {
+            if (err.empty()) {
+                // Sprint 3: Mise en cache (TTL 5min pour coverage)
+                CacheService::getInstance().set(cacheKey, geojson.toStyledString(), 300);
+                LOG_INFO << "💾 Cached coverage: " << cacheKey;
+                
+                auto resp = HttpResponse::newHttpJsonResponse(geojson);
+                resp->addHeader("Content-Type", "application/geo+json");
+                resp->addHeader("X-Cache", "MISS");
+                resp->addHeader("Cache-Control", "public, max-age=300");
+                
+                callback(resp);
+            } else {
+                auto errorDetails = ErrorHandler::analyzePostgresError(err);
+                ErrorHandler::logError("AntenneController::getSimplifiedCoverage", errorDetails);
                 auto resp = ErrorHandler::createErrorResponse(errorDetails);
                 callback(resp);
             }
