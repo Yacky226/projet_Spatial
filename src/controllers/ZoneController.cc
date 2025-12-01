@@ -1,4 +1,5 @@
 #include "ZoneController.h"
+#include "../services/CacheService.h"
 
 // 1. Create
 void ZoneController::create(const HttpRequestPtr& req, std::function<void (const HttpResponsePtr &)> &&callback) {
@@ -59,6 +60,96 @@ void ZoneController::getById(const HttpRequestPtr& req, std::function<void (cons
     });
 }
 
+// 3.5. Read By Type
+void ZoneController::getByType(const HttpRequestPtr& req, std::function<void (const HttpResponsePtr &)> &&callback, const std::string& type) {
+    ZoneService::getByType(type, [callback](const std::vector<ZoneModel>& list, const std::string& err) {
+        if(err.empty()){
+            Json::Value arr(Json::arrayValue);
+            for(auto &z : list) arr.append(z.toJson());
+            auto resp = HttpResponse::newHttpJsonResponse(arr);
+            callback(resp);
+        } else {
+            auto resp = HttpResponse::newHttpResponse();
+            resp->setStatusCode(k500InternalServerError);
+            resp->setBody(err);
+            callback(resp);
+        }
+    });
+}
+
+// 3.6. Read By Type Simplified (Sprint 2 - Optimization)
+/**
+ * Endpoint pour récupérer les zones par type avec simplification géométrique
+ * 
+ * Route: GET /api/zones/type/{type}/simplified?zoom={zoom}
+ * 
+ * Paramètres:
+ * - type (path): Type de zone (country, region, province, commune, etc.)
+ * - zoom (query): Niveau de zoom Leaflet (0-18) pour adapter la simplification
+ * 
+ * Réponse: JSON array de zones avec géométries simplifiées selon le zoom
+ * 
+ * Exemple: GET /api/zones/type/commune/simplified?zoom=10
+ * 
+ * Avantage: Réduit la taille des données de ~50% pour améliorer les performances
+ * de rendu sur la carte, surtout à petits zooms (vue monde/pays)
+ */
+void ZoneController::getByTypeSimplified(
+    const HttpRequestPtr& req, 
+    std::function<void (const HttpResponsePtr &)> &&callback, 
+    const std::string& type, 
+    int zoom) 
+{
+    // Validation du zoom (0-18 pour Leaflet standard)
+    if (zoom < 0 || zoom > 18) {
+        auto resp = HttpResponse::newHttpResponse();
+        resp->setStatusCode(k400BadRequest);
+        resp->setBody(R"({"error": "Invalid zoom level. Must be between 0 and 18"})");
+        callback(resp);
+        return;
+    }
+    
+    // Sprint 3: Vérifier cache Redis
+    std::string cacheKey = "type:" + type + ":zoom:" + std::to_string(zoom);
+    auto cached = CacheService::getInstance().getCachedZones(cacheKey);
+    if (cached) {
+        LOG_INFO << "✅ Cache HIT (zones): " << cacheKey;
+        auto resp = HttpResponse::newHttpJsonResponse(*cached);
+        resp->addHeader("X-Cache", "HIT");
+        callback(resp);
+        return;
+    }
+    
+    LOG_INFO << "❌ Cache MISS (zones): " << cacheKey;
+    
+    // Appel au service avec simplification
+    ZoneService::getByTypeSimplified(type, zoom, 
+        [callback, zoom, cacheKey](const std::vector<ZoneModel>& list, const std::string& err) {
+            if(err.empty()){
+                Json::Value arr(Json::arrayValue);
+                for(auto &z : list) {
+                    arr.append(z.toJson());
+                }
+                
+                // Sprint 3: Mettre en cache Redis (TTL 1h)
+                CacheService::getInstance().cacheZones(cacheKey, arr);
+                LOG_INFO << "💾 Cached (zones): " << cacheKey;
+                
+                auto resp = HttpResponse::newHttpJsonResponse(arr);
+                resp->addHeader("X-Cache", "MISS");
+                resp->addHeader("Cache-Control", "public, max-age=3600");
+                
+                callback(resp);
+            } else {
+                auto resp = HttpResponse::newHttpResponse();
+                resp->setStatusCode(k500InternalServerError);
+                resp->setBody(err);
+                callback(resp);
+            }
+        }
+    );
+}
+
 // 4. Update
 void ZoneController::update(const HttpRequestPtr& req, std::function<void (const HttpResponsePtr &)> &&callback, int id) {
     auto json = req->getJsonObject();
@@ -72,8 +163,11 @@ void ZoneController::update(const HttpRequestPtr& req, std::function<void (const
     z.wkt_geometry = (*json).get("wkt", "").asString();
     z.parent_id = (*json).get("parent_id", 0).asInt();
 
-    ZoneService::update(z, [callback](const std::string& err){
+    ZoneService::update(z, [callback, z](const std::string& err){
         if(err.empty()){
+            // Sprint 3: Invalider cache après update
+            CacheService::getInstance().invalidateZonesByType(z.type);
+            
             auto resp = HttpResponse::newHttpResponse();
             resp->setStatusCode(k200OK);
             resp->setBody("Zone updated");
@@ -91,6 +185,9 @@ void ZoneController::update(const HttpRequestPtr& req, std::function<void (const
 void ZoneController::remove(const HttpRequestPtr& req, std::function<void (const HttpResponsePtr &)> &&callback, int id) {
     ZoneService::remove(id, [callback](const std::string& err){
         if(err.empty()){
+            // Sprint 3: Invalider tout le cache zones après delete
+            CacheService::getInstance().delPattern("zones:*");
+            
             auto resp = HttpResponse::newHttpResponse();
             resp->setStatusCode(k204NoContent);
             callback(resp);

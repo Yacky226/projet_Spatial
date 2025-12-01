@@ -1,13 +1,38 @@
-﻿services:
+﻿version: '3.8'
+
+services:
+  # Service Redis pour cache backend (Sprint 3)
+  redis:
+    image: redis:7-alpine
+    container_name: redis_cache
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --requirepass "antennes5g_redis_pass"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "antennes5g_redis_pass", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
   api_cpp:
     build: .
     container_name: api_antennes_cpp
     ports:
       - "8082:8082"
-    # Cette section est CRUCIALE pour Linux afin d'accéder à la base de l'hôte
+    depends_on:
+      - redis
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=antennes5g_redis_pass
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
-      # Permet de modifier la config sans reconstruire l'image (optionnel)
       - ./config:/app/config
     restart: always
+
+volumes:
+  redis_data:

@@ -7,6 +7,10 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 find_package(Drogon REQUIRED)
 find_package(PostgreSQL REQUIRED)
 
+# Sprint 3: Redis dependencies
+find_library(REDIS_PLUS_PLUS redis++)
+find_library(HIREDIS hiredis)
+
 include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${CMAKE_CURRENT_SOURCE_DIR}/src/models
@@ -25,4 +29,6 @@ add_executable(${PROJECT_NAME} ${SRC_FILES})
 target_link_libraries(${PROJECT_NAME} PRIVATE 
     Drogon::Drogon
     PostgreSQL::PostgreSQL
+    ${REDIS_PLUS_PLUS}
+    ${HIREDIS}
 )

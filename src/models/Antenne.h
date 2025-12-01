@@ -10,6 +10,7 @@ struct Antenna {
     std::string technology;   // Enum 'technology_type' (2G, 4G, 5G)
     std::string installation_date;
     int operator_id;
+    std::string operatorName; // Nom de l'opérateur (jointure)
 
     // Pour l'API : on sépare la géométrie en lat/lon
     double latitude;
@@ -23,6 +24,7 @@ struct Antenna {
         ret["status"] = status;
         ret["technology"] = technology;
         ret["operator_id"] = operator_id;
+        ret["operatorName"] = operatorName;
         ret["latitude"] = latitude;
         ret["longitude"] = longitude;
         return ret;

@@ -66,4 +66,20 @@ public:
                                     
     static void getVoronoiDiagram(
         std::function<void(const Json::Value&, const std::string&)> callback);
+    
+    // ========== CLUSTERING BACKEND (Sprint 1 Optimization) ==========
+    /**
+     * Clustering backend optimisé utilisant ST_SnapToGrid de PostGIS
+     * 
+     * @param minLat, minLon, maxLat, maxLon - Bounding box de la vue
+     * @param zoom - Niveau de zoom Leaflet (0-18) pour calculer la taille de grille
+     * @param status - Filtre optionnel par statut (vide = tous)
+     * @param technology - Filtre optionnel par technologie (vide = tous)
+     * @param operator_id - Filtre optionnel par opérateur (0 = tous)
+     * @param callback - Retourne GeoJSON avec clusters ou erreur
+     */
+    static void getClusteredAntennas(double minLat, double minLon, double maxLat, double maxLon, 
+                                    int zoom, const std::string& status, 
+                                    const std::string& technology, int operator_id,
+                                    std::function<void(const Json::Value&, const std::string&)> callback);
 };

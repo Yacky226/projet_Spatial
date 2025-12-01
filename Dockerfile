@@ -1,6 +1,6 @@
 FROM ubuntu:22.04
 
-# 1. Installation des dépendances système
+# 1. Installation des dépendances système (Sprint 3: + Redis)
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y \
     git \
@@ -12,6 +12,7 @@ RUN apt-get update && apt-get install -y \
     openssl \
     libssl-dev \
     postgresql-server-dev-all \
+    libhiredis-dev \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
@@ -26,6 +27,17 @@ RUN git clone https://github.com/drogonframework/drogon && \
     cmake .. && \
     make -j$(nproc) && \
     make install
+
+# 2.5. Installation redis-plus-plus (Sprint 3)
+WORKDIR /tmp
+RUN git clone https://github.com/sewenew/redis-plus-plus.git && \
+    cd redis-plus-plus && \
+    mkdir build && \
+    cd build && \
+    cmake -DREDIS_PLUS_PLUS_CXX_STANDARD=17 .. && \
+    make -j$(nproc) && \
+    make install && \
+    ldconfig
 
 # 3. Préparation de l'application
 WORKDIR /app

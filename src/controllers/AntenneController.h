@@ -25,6 +25,9 @@ public:
         
         // NOUVEAU : Voronoi diagram
         ADD_METHOD_TO(AntenneController::getVoronoi, "/api/antennes/voronoi", Get);
+        
+        // NOUVEAU : Clustering backend optimisé (Sprint 1)
+        ADD_METHOD_TO(AntenneController::getClusteredAntennas, "/api/antennes/clustered?minLat={1}&minLon={2}&maxLat={3}&maxLon={4}&zoom={5}", Get);
     METHOD_LIST_END
 
 
@@ -49,5 +52,11 @@ public:
    void getCoverage(const HttpRequestPtr& req, std::function<void (const HttpResponsePtr &)> &&callback,
                      int operator_id, double minLat, double minLon, double maxLat, double maxLon);
     void getVoronoi(const HttpRequestPtr& req, std::function<void (const HttpResponsePtr &)> &&callback);
-                              
+    
+    // ========== CLUSTERING (Sprint 1 Optimization) ==========
+    // Clustering backend pour remplacer le clustering client-side
+    // Utilise ST_SnapToGrid pour grouper les antennes proches
+    // Supporte filtres optionnels: status, technology, operator_id
+    void getClusteredAntennas(const HttpRequestPtr& req, std::function<void (const HttpResponsePtr &)> &&callback,
+                             double minLat, double minLon, double maxLat, double maxLon, int zoom);
 };

@@ -907,3 +907,210 @@ void AntenneService::getVoronoiDiagram(
         }
     );
 }
+
+// ============================================================================
+// NOUVEAU : CLUSTERED ANTENNAS (Sprint 1 - Backend Clustering Optimization)
+// ============================================================================
+/**
+ * Clustering backend utilisant ST_SnapToGrid pour grouper les antennes proches
+ * 
+ * Principe:
+ * 1. ST_SnapToGrid arrondit les coordonnées sur une grille, regroupant les points proches
+ * 2. La taille de grille diminue avec le zoom (plus de détails = grille plus fine)
+ * 3. Les clusters (count > 1) retournent un centroïde + metadata (count, ids)
+ * 4. Les antennes seules (count = 1) retournent leurs données complètes
+ * 
+ * Calcul de la taille de grille:
+ * - Zoom 0-5 (monde/continents): 1.0° (~111 km)
+ * - Zoom 6-8 (pays): 0.5° (~55 km)
+ * - Zoom 9-11 (régions): 0.1° (~11 km)
+ * - Zoom 12-14 (villes): 0.01° (~1.1 km)
+ * - Zoom 15-18 (quartiers): 0.001° (~111 m)
+ */
+void AntenneService::getClusteredAntennas(
+    double minLat, double minLon, double maxLat, double maxLon,
+    int zoom, const std::string& status, const std::string& technology, int operator_id,
+    std::function<void(const Json::Value&, const std::string&)> callback) 
+{
+    auto client = app().getDbClient();
+    
+    // ========== CALCUL DE LA TAILLE DE GRILLE SELON LE ZOOM ==========
+    // Plus le zoom est élevé, plus la grille est fine (plus de détails)
+    double gridSize;
+    if (zoom <= 5) {
+        gridSize = 1.0;      // Zoom monde/continents: ~111 km
+    } else if (zoom <= 8) {
+        gridSize = 0.5;      // Zoom pays: ~55 km
+    } else if (zoom <= 11) {
+        gridSize = 0.1;      // Zoom régions: ~11 km
+    } else if (zoom <= 14) {
+        gridSize = 0.01;     // Zoom villes: ~1.1 km
+    } else {
+        gridSize = 0.001;    // Zoom quartiers: ~111 m
+    }
+    
+    // ========== CONSTRUCTION DE LA CLAUSE WHERE POUR LES FILTRES ==========
+    std::vector<std::string> whereClauses;
+    whereClauses.push_back("geom && ST_MakeEnvelope($1, $2, $3, $4, 4326)");
+    
+    int paramIndex = 5; // Les 4 premiers params sont minLon, minLat, maxLon, maxLat
+    std::string statusParam, techParam;
+    int operatorParam = 0;
+    
+    if (!status.empty()) {
+        whereClauses.push_back("status = $" + std::to_string(paramIndex++) + "::antenna_status");
+        statusParam = status;
+    }
+    if (!technology.empty()) {
+        whereClauses.push_back("technology = $" + std::to_string(paramIndex++) + "::technology_type");
+        techParam = technology;
+    }
+    if (operator_id > 0) {
+        whereClauses.push_back("operator_id = $" + std::to_string(paramIndex++));
+        operatorParam = operator_id;
+    }
+    
+    std::string whereClause;
+    for (size_t i = 0; i < whereClauses.size(); ++i) {
+        if (i > 0) whereClause += " AND ";
+        whereClause += whereClauses[i];
+    }
+    
+    // ========== REQUÊTE SQL AVEC CLUSTERING ==========
+    // Utilise ST_SnapToGrid pour regrouper les points proches
+    // GROUP BY sur la grille pour compter les antennes par cellule
+    std::string sql = R"(
+        WITH snapped AS (
+            SELECT 
+                id,
+                coverage_radius,
+                status,
+                technology,
+                installation_date,
+                operator_id,
+                geom,
+                ST_SnapToGrid(geom, )" + std::to_string(gridSize) + R"() AS grid_point
+            FROM antenna
+            WHERE )" + whereClause + R"(
+        ),
+        clusters AS (
+            SELECT 
+                grid_point,
+                COUNT(*) as point_count,
+                ARRAY_AGG(id) as antenna_ids,
+                ST_AsGeoJSON(ST_Centroid(ST_Collect(geom)))::json as centroid_geojson,
+                -- Pour les clusters, on agrège les métadonnées
+                ARRAY_AGG(status::text) as statuses,
+                ARRAY_AGG(technology::text) as technologies,
+                ARRAY_AGG(operator_id) as operator_ids,
+                AVG(coverage_radius) as avg_radius
+            FROM snapped
+            GROUP BY grid_point
+        )
+        SELECT json_build_object(
+            'type', 'FeatureCollection',
+            'features', COALESCE(json_agg(
+                json_build_object(
+                    'type', 'Feature',
+                    'geometry', centroid_geojson,
+                    'properties', json_build_object(
+                        'cluster', CASE WHEN point_count > 1 THEN true ELSE false END,
+                        'point_count', point_count,
+                        'antenna_ids', antenna_ids,
+                        'avg_radius', ROUND(avg_radius::numeric, 2),
+                        'statuses', statuses,
+                        'technologies', technologies,
+                        'operator_ids', operator_ids
+                    )
+                )
+            ), '[]'::json)
+        ) as geojson
+        FROM clusters
+    )";
+    
+    // ========== EXÉCUTION AVEC PARAMÈTRES DYNAMIQUES ==========
+    // Construction des arguments pour execSqlAsync
+    // Note: L'ordre des paramètres doit correspondre aux $1, $2, etc. dans le SQL
+    auto executeQuery = [&](auto&&... args) {
+        client->execSqlAsync(
+            sql,
+            [callback, zoom, gridSize](const Result& r) {
+                if (!r.empty() && !r[0]["geojson"].isNull()) {
+                    std::string geojsonStr = r[0]["geojson"].as<std::string>();
+                    Json::Value geojson;
+                    Json::Reader reader;
+                    
+                    if (reader.parse(geojsonStr, geojson)) {
+                        // Ajout de métadonnées pour debug/monitoring
+                        if (!geojson.isMember("metadata")) {
+                            geojson["metadata"] = Json::Value(Json::objectValue);
+                        }
+                        geojson["metadata"]["cluster_method"] = "ST_SnapToGrid";
+                        geojson["metadata"]["grid_size"] = gridSize;
+                        geojson["metadata"]["zoom_level"] = zoom;
+                        
+                        int totalFeatures = geojson["features"].size();
+                        int clusterCount = 0;
+                        int singleCount = 0;
+                        
+                        for (const auto& feature : geojson["features"]) {
+                            if (feature["properties"]["cluster"].asBool()) {
+                                clusterCount++;
+                            } else {
+                                singleCount++;
+                            }
+                        }
+                        
+                        geojson["metadata"]["total_features"] = totalFeatures;
+                        geojson["metadata"]["clusters"] = clusterCount;
+                        geojson["metadata"]["singles"] = singleCount;
+                        
+                        LOG_INFO << "Clustering: " << totalFeatures << " features (" 
+                                 << clusterCount << " clusters, " << singleCount 
+                                 << " singles) at zoom " << zoom << ", grid " << gridSize;
+                        
+                        callback(geojson, "");
+                    } else {
+                        auto errorDetails = ErrorHandler::analyzePostgresError("Failed to parse GeoJSON response");
+                        ErrorHandler::logError("AntenneService::getClusteredAntennas", errorDetails);
+                        callback(Json::Value(), errorDetails.userMessage);
+                    }
+                } else {
+                    // Pas de résultats, retourner FeatureCollection vide
+                    Json::Value emptyCollection;
+                    emptyCollection["type"] = "FeatureCollection";
+                    emptyCollection["features"] = Json::Value(Json::arrayValue);
+                    emptyCollection["metadata"] = Json::Value(Json::objectValue);
+                    emptyCollection["metadata"]["total_features"] = 0;
+                    callback(emptyCollection, "");
+                }
+            },
+            [callback](const DrogonDbException& e) {
+                auto errorDetails = ErrorHandler::analyzePostgresError(e.base().what());
+                ErrorHandler::logError("AntenneService::getClusteredAntennas", errorDetails);
+                callback(Json::Value(), errorDetails.userMessage);
+            },
+            std::forward<decltype(args)>(args)...
+        );
+    };
+    
+    // ========== APPEL AVEC LES BONS PARAMÈTRES SELON LES FILTRES ==========
+    // On doit passer les paramètres dans l'ordre: bbox, puis filtres optionnels
+    if (!status.empty() && !technology.empty() && operator_id > 0) {
+        executeQuery(minLon, minLat, maxLon, maxLat, statusParam, techParam, operatorParam);
+    } else if (!status.empty() && !technology.empty()) {
+        executeQuery(minLon, minLat, maxLon, maxLat, statusParam, techParam);
+    } else if (!status.empty() && operator_id > 0) {
+        executeQuery(minLon, minLat, maxLon, maxLat, statusParam, operatorParam);
+    } else if (!technology.empty() && operator_id > 0) {
+        executeQuery(minLon, minLat, maxLon, maxLat, techParam, operatorParam);
+    } else if (!status.empty()) {
+        executeQuery(minLon, minLat, maxLon, maxLat, statusParam);
+    } else if (!technology.empty()) {
+        executeQuery(minLon, minLat, maxLon, maxLat, techParam);
+    } else if (operator_id > 0) {
+        executeQuery(minLon, minLat, maxLon, maxLat, operatorParam);
+    } else {
+        executeQuery(minLon, minLat, maxLon, maxLat);
+    }
+}

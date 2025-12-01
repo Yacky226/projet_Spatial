@@ -2,6 +2,7 @@
 #include "../utils/Validator.h"
 #include "../utils/ErrorHandler.h"
 #include "../utils/PaginationHelper.h"
+#include "../services/CacheService.h"
 #include <drogon/HttpResponse.h>
 
 using namespace drogon;
@@ -312,6 +313,9 @@ void AntenneController::update(const HttpRequestPtr& req, std::function<void (co
 
     AntenneService::update(a, [callback, id](const std::string& err) {
         if (err.empty()) {
+            // Sprint 3: Invalider cache clusters après update
+            CacheService::getInstance().delPattern("clusters:*");
+            
             Json::Value ret;
             ret["success"] = true;
             ret["message"] = "Antenna updated successfully";
@@ -349,6 +353,9 @@ void AntenneController::remove(const HttpRequestPtr& req, std::function<void (co
 
     AntenneService::remove(id, [callback, id](const std::string& err) {
         if (err.empty()) {
+            // Sprint 3: Invalider cache clusters après delete
+            CacheService::getInstance().delPattern("clusters:*");
+            
             auto resp = HttpResponse::newHttpResponse();
             resp->setStatusCode(k204NoContent);
             callback(resp);
@@ -709,4 +716,144 @@ void AntenneController::getVoronoi(const HttpRequestPtr& req,
             callback(resp);
         }
     });
+}
+
+// ============================================================================
+// NOUVEAU : GET CLUSTERED ANTENNAS (Sprint 1 - Backend Clustering Optimization)
+// ============================================================================
+/**
+ * Endpoint de clustering backend pour remplacer le clustering client-side
+ * 
+ * Objectif: Réduire la charge frontend en déléguant le clustering au backend
+ * Technique: Utilise ST_SnapToGrid de PostGIS pour grouper les antennes proches
+ * 
+ * Paramètres obligatoires:
+ *  - minLat, minLon, maxLat, maxLon: Bounding box de la vue actuelle
+ *  - zoom: Niveau de zoom Leaflet (0-18) pour calculer la taille de grille
+ * 
+ * Paramètres optionnels (query string):
+ *  - status: Filtrer par statut (active, inactive, maintenance)
+ *  - technology: Filtrer par technologie (2G, 3G, 4G, 5G)
+ *  - operator_id: Filtrer par opérateur
+ * 
+ * Retour: GeoJSON FeatureCollection avec clusters
+ *  - Si cluster: geometry = centroïde, properties contient count et liste des IDs
+ *  - Si antenne unique: geometry = point exact, properties complètes
+ */
+void AntenneController::getClusteredAntennas(const HttpRequestPtr& req,
+                                             std::function<void (const HttpResponsePtr &)> &&callback,
+                                             double minLat, double minLon, double maxLat, double maxLon, int zoom) {
+    // ========== VALIDATION DES PARAMÈTRES ==========
+    Validator::ErrorCollector validator;
+    
+    // Validation bbox
+    if (!Validator::isValidLatitude(minLat) || !Validator::isValidLatitude(maxLat)) {
+        validator.addError("latitude", "Latitudes must be between -90 and +90 degrees");
+    }
+    if (!Validator::isValidLongitude(minLon) || !Validator::isValidLongitude(maxLon)) {
+        validator.addError("longitude", "Longitudes must be between -180 and +180 degrees");
+    }
+    if (minLat >= maxLat) {
+        validator.addError("bbox", "minLat must be less than maxLat");
+    }
+    if (minLon >= maxLon) {
+        validator.addError("bbox", "minLon must be less than maxLon");
+    }
+    
+    // Validation zoom (Leaflet: 0 = monde entier, 18 = max zoom)
+    if (zoom < 0 || zoom > 18) {
+        validator.addError("zoom", "Zoom level must be between 0 and 18");
+    }
+    
+    if (validator.hasErrors()) {
+        auto resp = HttpResponse::newHttpResponse();
+        resp->setStatusCode(k400BadRequest);
+        resp->setBody(validator.getErrorsAsJson());
+        resp->setContentTypeCode(CT_APPLICATION_JSON);
+        callback(resp);
+        return;
+    }
+    
+    // ========== EXTRACTION DES FILTRES OPTIONNELS ==========
+    std::string status = req->getOptionalParameter<std::string>("status").value_or("");
+    std::string technology = req->getOptionalParameter<std::string>("technology").value_or("");
+    int operator_id = req->getOptionalParameter<int>("operator_id").value_or(0);
+    
+    // Validation des filtres si fournis
+    if (!status.empty() && !Validator::isValidStatus(status)) {
+        auto resp = ErrorHandler::createGenericErrorResponse(
+            "Invalid status. Must be one of: active, inactive, maintenance", 
+            k400BadRequest
+        );
+        callback(resp);
+        return;
+    }
+    
+    if (!technology.empty() && !Validator::isValidTechnology(technology)) {
+        auto resp = ErrorHandler::createGenericErrorResponse(
+            "Invalid technology. Must be one of: 4G, 5G, 5G-SA, 5G-NSA", 
+            k400BadRequest
+        );
+        callback(resp);
+        return;
+    }
+    
+    // ========== SPRINT 3: CACHE REDIS ==========
+    // Clé de cache basée sur bbox + zoom + filtres
+    std::string cacheKey = "clusters:bbox:" + 
+                          std::to_string(minLat) + ":" + std::to_string(minLon) + ":" + 
+                          std::to_string(maxLat) + ":" + std::to_string(maxLon) + 
+                          ":z:" + std::to_string(zoom);
+    
+    if (!status.empty()) cacheKey += ":st:" + status;
+    if (!technology.empty()) cacheKey += ":tech:" + technology;
+    if (operator_id > 0) cacheKey += ":op:" + std::to_string(operator_id);
+    
+    // Vérification cache
+    auto cached = CacheService::getInstance().getCachedClusters(cacheKey);
+    if (cached) {
+        LOG_INFO << "✅ Cache HIT: " << cacheKey;
+        
+        auto resp = HttpResponse::newHttpJsonResponse(*cached);
+        resp->addHeader("Content-Type", "application/geo+json");
+        resp->addHeader("X-Cache", "HIT");
+        resp->addHeader("Cache-Control", "public, max-age=120");
+        callback(resp);
+        return;
+    }
+    
+    LOG_INFO << "❌ Cache MISS: " << cacheKey;
+    
+    // ========== APPEL AU SERVICE ==========
+    AntenneService::getClusteredAntennas(
+        minLat, minLon, maxLat, maxLon, zoom, status, technology, operator_id,
+        [callback, zoom, minLat, minLon, maxLat, maxLon, cacheKey](const Json::Value& geojson, const std::string& err) {
+            if (err.empty()) {
+                // Ajout de métadonnées utiles pour le debug et le monitoring
+                Json::Value response = geojson;
+                response["metadata"]["zoom"] = zoom;
+                response["metadata"]["bbox"] = Json::Value(Json::objectValue);
+                response["metadata"]["bbox"]["minLat"] = minLat;
+                response["metadata"]["bbox"]["minLon"] = minLon;
+                response["metadata"]["bbox"]["maxLat"] = maxLat;
+                response["metadata"]["bbox"]["maxLon"] = maxLon;
+                
+                // Sprint 3: Mise en cache (TTL 2min pour clusters)
+                CacheService::getInstance().cacheClusters(cacheKey, response);
+                LOG_INFO << "💾 Cached clusters: " << cacheKey;
+                
+                auto resp = HttpResponse::newHttpJsonResponse(response);
+                resp->addHeader("Content-Type", "application/geo+json");
+                resp->addHeader("X-Cache", "MISS");
+                resp->addHeader("Cache-Control", "public, max-age=120");
+                
+                callback(resp);
+            } else {
+                auto errorDetails = ErrorHandler::analyzePostgresError(err);
+                ErrorHandler::logError("AntenneController::getClusteredAntennas", errorDetails);
+                auto resp = ErrorHandler::createErrorResponse(errorDetails);
+                callback(resp);
+            }
+        }
+    );
 }

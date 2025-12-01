@@ -32,19 +32,19 @@ CREATE INDEX idx_antennes_statut ON antennes(statut);
 -- ========================================
 -- TABLE : ZONES
 -- ========================================
-CREATE TABLE IF NOT EXISTS zones (
+CREATE TABLE IF NOT EXISTS zone (
     id SERIAL PRIMARY KEY,
-    nom VARCHAR(255) NOT NULL UNIQUE,
-    description TEXT,
-    type_zone VARCHAR(50) NOT NULL, -- "urbaine", "rurale", "mixte"
-    population INTEGER,
-    geom GEOGRAPHY(POLYGON, 4326) NOT NULL,
+    name VARCHAR(255) NOT NULL UNIQUE,
+    type VARCHAR(50) NOT NULL, -- "country", "region", "province", "coverage", "white_zone"
+    density DOUBLE PRECISION DEFAULT 0.0,
+    geom GEOMETRY(POLYGON, 4326) NOT NULL,
+    parent_id INTEGER DEFAULT NULL REFERENCES zone(id),
     date_creation TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Créer l'index géospatial pour zones
-CREATE INDEX idx_zones_geom ON zones USING GIST (geom);
-CREATE INDEX idx_zones_type ON zones(type_zone);
+CREATE INDEX idx_zone_geom ON zone USING GIST (geom);
+CREATE INDEX idx_zone_type ON zone(type);
 
 -- ========================================
 -- TABLE : COUVERTURE_ZONES
@@ -52,7 +52,7 @@ CREATE INDEX idx_zones_type ON zones(type_zone);
 CREATE TABLE IF NOT EXISTS couverture_zones (
     id SERIAL PRIMARY KEY,
     antenne_id INTEGER NOT NULL REFERENCES antennes(id) ON DELETE CASCADE,
-    zone_id INTEGER NOT NULL REFERENCES zones(id) ON DELETE CASCADE,
+    zone_id INTEGER NOT NULL REFERENCES zone(id) ON DELETE CASCADE,
     pourcentage_couverture DECIMAL(5, 2) NOT NULL,
     qualite_signal VARCHAR(20) CHECK (qualite_signal IN ('excellent', 'bon', 'moyen', 'faible')),
     date_analyse TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -109,12 +109,12 @@ VALUES
 ON CONFLICT DO NOTHING;
 
 -- Insérer des zones exemple
-INSERT INTO zones (nom, description, type_zone, population, geom)
+INSERT INTO zone (name, type, density, geom)
 VALUES 
-    ('Casablanca Centre', 'Zone urbaine centrale', 'urbaine', 500000, 
-     ST_GeogFromText('SRID=4326;POLYGON((-7.6 33.57, -7.58 33.57, -7.58 33.59, -7.6 33.59, -7.6 33.57))')),
-    ('Aïn Chock', 'Zone urbaine périphérique', 'urbaine', 250000,
-     ST_GeogFromText('SRID=4326;POLYGON((-7.65 33.50, -7.60 33.50, -7.60 33.55, -7.65 33.55, -7.65 33.50))'))
+    ('Casablanca Centre', 'country', 500.0, 
+     ST_GeomFromText('SRID=4326;POLYGON((-7.6 33.57, -7.58 33.57, -7.58 33.59, -7.6 33.59, -7.6 33.57))')),
+    ('Aïn Chock', 'region', 250.0,
+     ST_GeomFromText('SRID=4326;POLYGON((-7.65 33.50, -7.60 33.50, -7.60 33.55, -7.65 33.55, -7.65 33.50))'))
 ON CONFLICT DO NOTHING;
 
 -- Insérer des couvertures exemple
@@ -132,15 +132,15 @@ ON CONFLICT DO NOTHING;
 CREATE OR REPLACE VIEW vue_couverture_par_zone AS
 SELECT 
     z.id,
-    z.nom as zone_nom,
+    z.name as zone_nom,
     COUNT(DISTINCT a.id) as nombre_antennes,
     AVG(c.pourcentage_couverture) as couverture_moyenne,
     MAX(c.pourcentage_couverture) as couverture_max,
-    z.population
-FROM zones z
+    z.density as density
+FROM zone z
 LEFT JOIN couverture_zones c ON z.id = c.zone_id
 LEFT JOIN antennes a ON c.antenne_id = a.id
-GROUP BY z.id, z.nom, z.population;
+GROUP BY z.id, z.name, z.density;
 
 -- ========================================
 -- FONCTION : Calculer la distance entre deux points
@@ -168,7 +168,7 @@ DECLARE
     count INTEGER;
 BEGIN
     SELECT COUNT(*) INTO count
-    FROM antennes a, zones z
+    FROM antennes a, zone z
     WHERE z.id = zone_id AND ST_Contains(z.geom, a.geom);
     RETURN count;
 END;
