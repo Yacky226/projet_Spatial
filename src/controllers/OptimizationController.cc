@@ -13,11 +13,20 @@ void OptimizationController::optimize(const HttpRequestPtr& req, std::function<v
 
     auto request = OptimizationRequest::fromJson(json);
 
-    // Validation
-    if (request.zone_id <= 0 || request.antennas_count <= 0) {
+    // Validation: zone_id XOR bbox_wkt
+    if (!request.isValid()) {
         auto resp = HttpResponse::newHttpResponse();
         resp->setStatusCode(k400BadRequest);
-        resp->setBody("Invalid parameters");
+        resp->setBody("Invalid parameters: must provide either zone_id OR bbox_wkt (not both, not neither)");
+        callback(resp);
+        return;
+    }
+    
+    // Validation: antennas_count
+    if (request.antennas_count <= 0) {
+        auto resp = HttpResponse::newHttpResponse();
+        resp->setStatusCode(k400BadRequest);
+        resp->setBody("Invalid parameters: antennas_count must be positive");
         callback(resp);
         return;
     }
@@ -71,4 +80,15 @@ void OptimizationController::optimize(const HttpRequestPtr& req, std::function<v
             }
         });
     }
+}
+
+void OptimizationController::options(const HttpRequestPtr& req, std::function<void (const HttpResponsePtr &)> &&callback) {
+    auto resp = HttpResponse::newHttpResponse();
+    resp->setStatusCode(k200OK);
+    resp->addHeader("Access-Control-Allow-Origin", "*");
+    resp->addHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+    resp->addHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With");
+    resp->addHeader("Access-Control-Max-Age", "86400");
+    
+    callback(resp);
 }
