@@ -10,6 +10,8 @@ struct SignalReport {
     double signal_strength_dbm; // Puissance reçue (ex: -90 dBm)
     bool has_obstacle;
     std::string signal_quality; // Excellent, Bon, Moyen, Faible, Nul
+    double latitude;
+    double longitude;
 
     Json::Value toJson() const {
         Json::Value ret;
@@ -19,6 +21,8 @@ struct SignalReport {
         ret["signal_dbm"] = signal_strength_dbm;
         ret["has_obstacle"] = has_obstacle;
         ret["quality"] = signal_quality;
+        ret["latitude"] = latitude;
+        ret["longitude"] = longitude;
         return ret;
     }
 };

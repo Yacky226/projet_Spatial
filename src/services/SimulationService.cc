@@ -23,10 +23,13 @@ void SimulationService::checkSignalAtPosition(double lat, double lon,
     // 1. Trouve les antennes proches (< 5km)
     // 2. Calcule la distance exacte
     // 3. Vérifie s'il y a un obstacle qui coupe la ligne (ST_Intersects avec une Ligne)
+    // 4. Récupère les coordonnées de l'antenne
     std::string sql = R"(
         SELECT 
             a.id, 
             a.technology,
+            ST_X(a.geom::geometry) as longitude,
+            ST_Y(a.geom::geometry) as latitude,
             ST_Distance(a.geom::geography, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography) / 1000.0 as dist_km,
             EXISTS(
                 SELECT 1 FROM obstacle o 
@@ -46,6 +49,8 @@ void SimulationService::checkSignalAtPosition(double lat, double lon,
                 SignalReport report;
                 report.antenna_id = row["id"].as<int>();
                 report.technology = row["technology"].as<std::string>();
+                report.latitude = row["latitude"].as<double>();
+                report.longitude = row["longitude"].as<double>();
                 report.distance_km = row["dist_km"].as<double>();
                 report.has_obstacle = row["blocked"].as<bool>();
 
