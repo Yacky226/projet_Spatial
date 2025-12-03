@@ -51,7 +51,7 @@ public:
 
     static bool isValidTechnology(const std::string& tech) {
         static const std::vector<std::string> validTechs = {
-            "4G", "5G", "5G-SA", "5G-NSA"
+            "2G", "3G", "4G", "5G"
         };
         return std::find(validTechs.begin(), validTechs.end(), tech) 
                != validTechs.end();

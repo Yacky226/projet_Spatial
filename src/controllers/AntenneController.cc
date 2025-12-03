@@ -52,7 +52,7 @@ void AntenneController::create(const HttpRequestPtr& req, std::function<void (co
     if (!Validator::isNotEmpty(technology)) {
         validator.addError("technology", "Technology is required");
     } else if (!Validator::isValidTechnology(technology)) {
-        validator.addError("technology", "Technology must be one of: 4G, 5G, 5G-SA, 5G-NSA");
+        validator.addError("technology", "Technology must be one of: 2G, 3G, 4G, 5G");
     }
     if (!Validator::isNonNegative(operator_id) || operator_id == 0) {
         validator.addError("operator_id", "Operator ID is required and must be a positive integer");
@@ -791,7 +791,7 @@ void AntenneController::getClusteredAntennas(const HttpRequestPtr& req,
     
     if (!technology.empty() && !Validator::isValidTechnology(technology)) {
         auto resp = ErrorHandler::createGenericErrorResponse(
-            "Invalid technology. Must be one of: 4G, 5G, 5G-SA, 5G-NSA", 
+            "Invalid technology. Must be one of: 2G, 3G, 4G, 5G", 
             k400BadRequest
         );
         callback(resp);
