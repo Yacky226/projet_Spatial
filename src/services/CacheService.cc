@@ -1,5 +1,7 @@
 #include "CacheService.h"
 #include <drogon/drogon.h>
+#include <thread>
+#include <chrono>
 
 using namespace drogon;
 
@@ -9,26 +11,36 @@ CacheService& CacheService::getInstance() {
 }
 
 void CacheService::init(const std::string& host, int port, const std::string& password) {
-    try {
-        ConnectionOptions opts;
-        opts.host = host;
-        opts.port = port;
-        if (!password.empty()) {
-            opts.password = password;
+    int maxRetries = 5;
+    int retryDelay = 1000; // ms
+    
+    for (int attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            ConnectionOptions opts;
+            opts.host = host;
+            opts.port = port;
+            if (!password.empty()) {
+                opts.password = password;
+            }
+            opts.socket_timeout = std::chrono::milliseconds(1000);  // Augmenté à 1s
+            opts.connect_timeout = std::chrono::milliseconds(2000); // Ajout timeout connexion
+            opts.keep_alive = true;
+            
+            redis_ = std::make_unique<Redis>(opts);
+            
+            // Test connexion
+            redis_->ping();
+            LOG_INFO << "✅ Redis connected: " << host << ":" << port;
+            return;
+        } catch (const Error& e) {
+            LOG_WARN << "❌ Redis connection attempt " << attempt << "/" << maxRetries << " failed: " << e.what();
+            redis_.reset();
+            if (attempt < maxRetries) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(retryDelay));
+            }
         }
-        opts.socket_timeout = std::chrono::milliseconds(100);
-        opts.keep_alive = true;
-        
-        redis_ = std::make_unique<Redis>(opts);
-        
-        // Test connexion
-        redis_->ping();
-        LOG_INFO << "✅ Redis connected: " << host << ":" << port;
-    } catch (const Error& e) {
-        LOG_ERROR << "❌ Redis connection failed: " << e.what();
-        redis_.reset();
-        throw;
     }
+    throw std::runtime_error("Failed to connect to Redis after " + std::to_string(maxRetries) + " attempts");
 }
 
 void CacheService::set(const std::string& key, const std::string& value, int ttl_seconds) {

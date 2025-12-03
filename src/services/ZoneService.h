@@ -20,6 +20,8 @@ public:
     static void remove(int id, std::function<void(const std::string&)> callback);
     static void getAllGeoJSON(std::function<void(const Json::Value&, const std::string&)> callback);
     static void getWhiteZones(int zone_id, int operator_id,std::function<void(const Json::Value&, const std::string&)> callback);
+    static void searchZones(const std::string& type, const std::string& query, int limit, 
+                           std::function<void(const std::vector<ZoneModel>&, const std::string&)> callback);
 
 private:
     // Utilitaire pour calculer la tolérance de simplification selon le zoom

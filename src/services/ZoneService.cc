@@ -313,3 +313,117 @@ double ZoneService::calculateSimplificationTolerance(int zoom) {
         return 0.0001;    // ~11 m - Zoom quartiers (détails préservés)
     }
 }
+
+// ============================================================================
+// NOUVEAU: RECHERCHE DE ZONES (Sprint - Optimization Modal)
+// ============================================================================
+/**
+ * Recherche des zones par type et query string avec ILIKE (insensible à la casse)
+ * 
+ * Optimisations:
+ * - ILIKE avec % pour recherche partielle
+ * - LIMIT pour éviter trop de résultats
+ * - Pas de géométrie complète (légère pour autocomplete)
+ * - Index sur name pour performance
+ * 
+ * @param type Type de zone (country, region, province, commune)
+ * @param query Texte de recherche (peut être vide pour tout récupérer)
+ * @param limit Nombre max de résultats
+ * @param callback Retourne les zones correspondantes ou erreur
+ */
+void ZoneService::searchZones(
+    const std::string& type, 
+    const std::string& query, 
+    int limit,
+    std::function<void(const std::vector<ZoneModel>&, const std::string&)> callback) 
+{
+    auto client = app().getDbClient();
+    
+    std::string sql;
+    
+    if (query.empty()) {
+        // Si pas de query, retourner toutes les zones du type 
+        sql = R"(
+            SELECT 
+                id, 
+                name, 
+                type, 
+                density, 
+                parent_id,
+                ST_AsText(ST_Envelope(geom)) as bbox_wkt
+            FROM zone 
+            WHERE type = $1::zone_type 
+            ORDER BY name
+            LIMIT $2
+        )";
+        
+        client->execSqlAsync(
+            sql,
+            [callback](const Result& r) {
+                std::vector<ZoneModel> list;
+                for (auto row : r) {
+                    ZoneModel z;
+                    z.id = row["id"].as<int>();
+                    z.name = row["name"].as<std::string>();
+                    z.type = row["type"].as<std::string>();
+                    z.density = row["density"].as<double>();
+                    z.parent_id = row["parent_id"].isNull() ? 0 : row["parent_id"].as<int>();
+                    z.wkt_geometry = row["bbox_wkt"].as<std::string>(); // Envelope pour bounds
+                    list.push_back(z);
+                }
+                callback(list, "");
+            },
+            [callback](const DrogonDbException& e) {
+                LOG_ERROR << "Error searching zones: " << e.base().what();
+                callback({}, e.base().what());
+            },
+            type, 
+            std::to_string(limit)
+        );
+    } else {
+        // Recherche avec ILIKE (insensible à la casse)
+        sql = R"(
+            SELECT 
+                id, 
+                name, 
+                type, 
+                density, 
+                parent_id,
+                ST_AsText(ST_Envelope(geom)) as bbox_wkt
+            FROM zone 
+            WHERE type = $1::zone_type 
+              AND name ILIKE $2
+            ORDER BY name
+            LIMIT $3
+        )";
+        
+        std::string searchPattern = "%" + query + "%";
+        
+        client->execSqlAsync(
+            sql,
+            [callback, query](const Result& r) {
+                std::vector<ZoneModel> list;
+                for (auto row : r) {
+                    ZoneModel z;
+                    z.id = row["id"].as<int>();
+                    z.name = row["name"].as<std::string>();
+                    z.type = row["type"].as<std::string>();
+                    z.density = row["density"].as<double>();
+                    z.parent_id = row["parent_id"].isNull() ? 0 : row["parent_id"].as<int>();
+                    z.wkt_geometry = row["bbox_wkt"].as<std::string>(); // Envelope pour bounds
+                    list.push_back(z);
+                }
+                
+                LOG_INFO << "Found " << list.size() << " zones matching '" << query << "'";
+                callback(list, "");
+            },
+            [callback](const DrogonDbException& e) {
+                LOG_ERROR << "Error searching zones: " << e.base().what();
+                callback({}, e.base().what());
+            },
+            type, 
+            searchPattern,
+            std::to_string(limit)
+        );
+    }
+}

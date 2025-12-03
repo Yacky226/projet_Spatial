@@ -2,6 +2,8 @@
 #include "../models/OptimizationRequest.h"
 
 void OptimizationController::optimize(const HttpRequestPtr& req, std::function<void (const HttpResponsePtr &)> &&callback) {
+    LOG_INFO << "🎯 Optimization request received";
+    
     auto json = req->getJsonObject();
     if (!json) {
         auto resp = HttpResponse::newHttpResponse();
@@ -12,6 +14,10 @@ void OptimizationController::optimize(const HttpRequestPtr& req, std::function<v
     }
 
     auto request = OptimizationRequest::fromJson(json);
+    
+    LOG_INFO << "🎯 Optimization params: zone_id=" << (request.zone_id.has_value() ? std::to_string(request.zone_id.value()) : "none")
+             << ", antennas=" << request.antennas_count
+             << ", radius=" << request.radius;
 
     // Validation: zone_id XOR bbox_wkt
     if (!request.isValid()) {

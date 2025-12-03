@@ -11,37 +11,78 @@ void OptimizationService::optimizeGreedy(const OptimizationRequest& req,
                                          std::function<void(const std::vector<OptimizationResult>&, const std::string&)> callback) {
     auto client = app().getDbClient();
 
-    // ALGORITHME SQL "MONTE CARLO" :
-    // 1. On sélectionne la géométrie de la zone cible (zone_id OU bbox).
-    // 2. ST_GeneratePoints : On génère 100 points aléatoires DANS la zone.
-    // 3. LATERAL JOIN : Pour CHAQUE point candidat, on simule une couverture.
-    // 4. ST_Intersection : On calcule la surface couverte par ce candidat.
-    // 5. On multiplie par la densité de la zone pour avoir la population estimée.
-    // 6. On trie par population décroissante et on garde le top N.
+    // ALGORITHME GREEDY OPTIMISÉ :
+    // 1. Récupérer les density_zones (cellules de densité de 250m) dans la zone cible
+    // 2. Ces zones ont déjà une densité calculée
+    // 3. Pour chaque cellule, vérifier qu'elle n'est pas sur un obstacle majeur
+    // 4. Retourner les meilleures positions
 
     std::string sql;
     
     if (req.isZoneMode()) {
-        // Mode zone_id : utilise la zone prédéfinie
-        // Construire la requête SQL avec le nombre d'antennes
-        sql = "WITH target_zone AS ("
-              "    SELECT geom, density FROM zone WHERE id = $1"
-              "), "
-              "candidates AS ("
-              "    SELECT (ST_Dump(ST_GeneratePoints(geom, 100))).geom as pt_geom"
-              "    FROM target_zone"
-              ") "
-              "SELECT "
-              "    ST_X(pt_geom) as lon,"
-              "    ST_Y(pt_geom) as lat,"
-              "    (ST_Area(ST_Intersection(target_zone.geom, ST_Buffer(pt_geom::geography, $2)::geometry)::geography) / 1000000.0) * target_zone.density as pop_covered "
-              "FROM candidates, target_zone "
-              "ORDER BY pop_covered DESC "
-              "LIMIT " + std::to_string(req.antennas_count);
+        LOG_INFO << "🎯 Starting Greedy optimization for zone_id=" << req.zone_id.value();
+        
+        // Utiliser les density_zones existantes (beaucoup plus rapide)
+        // Ou générer des points sur la zone simplifiée
+        sql = R"(
+            WITH target_zone AS (
+                SELECT id, geom, COALESCE(density, 100.0) as density
+                FROM zone 
+                WHERE id = $1
+            ),
+            -- Utiliser les density_zones enfants si disponibles
+            density_cells AS (
+                SELECT 
+                    ST_Centroid(dz.geom) as pt,
+                    dz.density
+                FROM zone dz
+                WHERE dz.type = 'density_zone'
+                  AND dz.parent_id IN (
+                      SELECT z.id FROM zone z, target_zone t 
+                      WHERE ST_Intersects(z.geom, t.geom)
+                        AND z.type IN ('commune', 'province', 'region')
+                  )
+                ORDER BY dz.density DESC NULLS LAST
+                LIMIT 200
+            ),
+            -- Si pas de density_zones, générer des points sur la zone simplifiée
+            fallback_points AS (
+                SELECT 
+                    (ST_Dump(ST_GeneratePoints(ST_Simplify(t.geom, 0.01), 50))).geom as pt,
+                    t.density
+                FROM target_zone t
+                WHERE NOT EXISTS (SELECT 1 FROM density_cells LIMIT 1)
+            ),
+            all_candidates AS (
+                SELECT pt, density FROM density_cells
+                UNION ALL
+                SELECT pt, density FROM fallback_points
+            ),
+            -- Filtrer les points qui tombent sur des obstacles de type polygon (buildings, water)
+            valid_candidates AS (
+                SELECT c.pt, c.density
+                FROM all_candidates c
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM obstacle o 
+                    WHERE o.geom_type IN ('POLYGON', 'MULTIPOLYGON')
+                      AND ST_Intersects(c.pt, o.geom)
+                    LIMIT 1
+                )
+            )
+            SELECT 
+                ST_X(pt) as lon,
+                ST_Y(pt) as lat,
+                COALESCE(density, 100.0) * 
+                    (ST_Area(ST_Buffer(pt::geography, $2)::geometry::geography) / 1000000.0) 
+                    as pop_covered
+            FROM valid_candidates
+            ORDER BY pop_covered DESC
+            LIMIT )" + std::to_string(req.antennas_count);
         
         client->execSqlAsync(
             sql,
             [callback](const Result &r) {
+                LOG_INFO << "🎯 Greedy completed: " << r.size() << " candidates found";
                 std::vector<OptimizationResult> results;
                 for (auto row : r) {
                     OptimizationResult res;
@@ -54,40 +95,67 @@ void OptimizationService::optimizeGreedy(const OptimizationRequest& req,
                 callback(results, "");
             },
             [callback](const DrogonDbException &e) {
+                LOG_ERROR << "🎯 Greedy error: " << e.base().what();
                 callback({}, e.base().what());
             },
             req.zone_id.value(),
             req.radius
         );
     } else {
-        // Mode bbox : utilise la géométrie du bbox directement
-        sql = "WITH bbox_geom AS ("
-              "    SELECT ST_GeomFromText($1, 4326) as geom"
-              "), "
-              "target_zone AS ("
-              "    SELECT "
-              "        bg.geom,"
-              "        COALESCE("
-              "            (SELECT AVG(density) FROM zone z WHERE ST_Intersects(z.geom, bg.geom)),"
-              "            1000.0"
-              "        ) as density"
-              "    FROM bbox_geom bg"
-              "), "
-              "candidates AS ("
-              "    SELECT (ST_Dump(ST_GeneratePoints(geom, 100))).geom as pt_geom"
-              "    FROM target_zone"
-              ") "
-              "SELECT "
-              "    ST_X(pt_geom) as lon,"
-              "    ST_Y(pt_geom) as lat,"
-              "    (ST_Area(ST_Intersection(target_zone.geom, ST_Buffer(pt_geom::geography, $2)::geometry)::geography) / 1000000.0) * target_zone.density as pop_covered "
-              "FROM candidates, target_zone "
-              "ORDER BY pop_covered DESC "
-              "LIMIT " + std::to_string(req.antennas_count);
+        // Mode bbox
+        LOG_INFO << "🎯 Starting Greedy optimization for bbox";
+        sql = R"(
+            WITH bbox_geom AS (
+                SELECT ST_GeomFromText($1, 4326) as geom
+            ),
+            -- Chercher les density_zones dans le bbox
+            density_cells AS (
+                SELECT 
+                    ST_Centroid(dz.geom) as pt,
+                    dz.density
+                FROM zone dz, bbox_geom bg
+                WHERE dz.type = 'density_zone'
+                  AND ST_Intersects(dz.geom, bg.geom)
+                ORDER BY dz.density DESC NULLS LAST
+                LIMIT 200
+            ),
+            -- Fallback: générer des points
+            fallback_points AS (
+                SELECT 
+                    (ST_Dump(ST_GeneratePoints(bg.geom, 50))).geom as pt,
+                    (SELECT COALESCE(AVG(density), 100.0) FROM zone z WHERE ST_Intersects(z.geom, bg.geom) AND z.density IS NOT NULL) as density
+                FROM bbox_geom bg
+                WHERE NOT EXISTS (SELECT 1 FROM density_cells LIMIT 1)
+            ),
+            all_candidates AS (
+                SELECT pt, density FROM density_cells
+                UNION ALL
+                SELECT pt, density FROM fallback_points
+            ),
+            valid_candidates AS (
+                SELECT c.pt, c.density
+                FROM all_candidates c
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM obstacle o 
+                    WHERE o.geom_type IN ('POLYGON', 'MULTIPOLYGON')
+                      AND ST_Intersects(c.pt, o.geom)
+                    LIMIT 1
+                )
+            )
+            SELECT 
+                ST_X(pt) as lon,
+                ST_Y(pt) as lat,
+                COALESCE(density, 100.0) * 
+                    (ST_Area(ST_Buffer(pt::geography, $2)::geometry::geography) / 1000000.0) 
+                    as pop_covered
+            FROM valid_candidates
+            ORDER BY pop_covered DESC
+            LIMIT )" + std::to_string(req.antennas_count);
         
         client->execSqlAsync(
             sql,
             [callback](const Result &r) {
+                LOG_INFO << "🎯 Greedy (bbox) completed: " << r.size() << " candidates";
                 std::vector<OptimizationResult> results;
                 for (auto row : r) {
                     OptimizationResult res;
@@ -100,6 +168,7 @@ void OptimizationService::optimizeGreedy(const OptimizationRequest& req,
                 callback(results, "");
             },
             [callback](const DrogonDbException &e) {
+                LOG_ERROR << "🎯 Greedy (bbox) error: " << e.base().what();
                 callback({}, e.base().what());
             },
             req.bbox_wkt.value(),
@@ -222,229 +291,168 @@ static void computeKMeansCentroids(
 }
 
 // ============================================================================
-// NOUVEL ALGORITHME : K-MEANS CLUSTERING
+// ALGORITHME K-MEANS CLUSTERING OPTIMISÉ
 // ============================================================================
 void OptimizationService::optimizeKMeans(const OptimizationRequest& req, 
                                          std::function<void(const std::vector<OptimizationResult>&, const std::string&)> callback) {
     auto client = app().getDbClient();
 
-    // Étape 1 : Récupérer tous les points de population dans la zone
+    // Utiliser les density_zones existantes comme données d'entrée pour K-means
     std::string sql;
     
     if (req.isZoneMode()) {
-        // Mode zone_id : utilise la zone prédéfinie
+        LOG_INFO << "🎯 Starting K-Means optimization for zone_id=" << req.zone_id.value();
+        
         sql = R"(
-            WITH zone_data AS (
-                SELECT 
-                    id,
-                    geom,
-                    density,
-                    ST_Area(geom::geography) / 1000000.0 as area_km2
+            WITH target_zone AS (
+                SELECT id, geom, COALESCE(density, 100.0) as density
                 FROM zone 
                 WHERE id = $1
             ),
-            -- Générer une grille de points pondérés par la densité
-            population_points AS (
+            -- Récupérer les density_zones dans la zone cible
+            density_cells AS (
                 SELECT 
-                    (ST_DumpPoints(
-                        ST_GeneratePoints(
-                            z.geom, 
-                            GREATEST(100, FLOOR(z.density * z.area_km2 / 100))::int
-                        )
-                    )).geom as point,
-                    z.density
-                FROM zone_data z
+                    ST_X(ST_Centroid(dz.geom)) as lon,
+                    ST_Y(ST_Centroid(dz.geom)) as lat,
+                    COALESCE(dz.density, 100.0) as weight
+                FROM zone dz
+                WHERE dz.type = 'density_zone'
+                  AND dz.parent_id IN (
+                      SELECT z.id FROM zone z, target_zone t 
+                      WHERE ST_Intersects(z.geom, t.geom)
+                        AND z.type IN ('commune', 'province', 'region')
+                  )
+                ORDER BY dz.density DESC NULLS LAST
+                LIMIT 500
+            ),
+            -- Fallback si pas de density_zones
+            fallback_points AS (
+                SELECT 
+                    ST_X((ST_Dump(ST_GeneratePoints(ST_Simplify(t.geom, 0.01), 100))).geom) as lon,
+                    ST_Y((ST_Dump(ST_GeneratePoints(ST_Simplify(t.geom, 0.01), 100))).geom) as lat,
+                    t.density as weight
+                FROM target_zone t
+                WHERE NOT EXISTS (SELECT 1 FROM density_cells LIMIT 1)
             )
-            SELECT 
-                ST_X(point) as lon,
-                ST_Y(point) as lat,
-                density as weight
-            FROM population_points
-            ORDER BY RANDOM()
-            LIMIT 1000
+            SELECT lon, lat, COALESCE(weight, 100.0) as weight 
+            FROM density_cells
+            UNION ALL
+            SELECT lon, lat, weight FROM fallback_points
         )";
         
         client->execSqlAsync(sql,
             [callback, req, client](const Result& r) {
                 if (r.empty()) {
-                    callback({}, "Zone not found or empty");
+                    LOG_WARN << "🎯 K-Means: No data found for zone";
+                    callback({}, "Zone not found or no density data available");
                     return;
                 }
+
+                LOG_INFO << "🎯 K-Means: Processing " << r.size() << " data points";
 
                 // Calculer les centroïdes K-means
                 std::vector<std::tuple<double, double, double>> centroids;
                 computeKMeansCentroids(r, req.antennas_count, centroids);
                 
-                // Calculer la population couverte par chaque centroïde (mode zone)
-                std::string coverageSQL = R"(
-                    WITH antenna_coverage AS (
-                        SELECT 
-                            $1 as lat,
-                            $2 as lon,
-                            ST_Buffer(
-                                ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography,
-                                $3
-                            )::geometry as coverage
-                    ),
-                    zone_intersection AS (
-                        SELECT 
-                            z.density,
-                            ST_Area(
-                                ST_Intersection(z.geom, ac.coverage)::geography
-                            ) / 1000000.0 as covered_area_km2
-                        FROM zone z, antenna_coverage ac
-                        WHERE z.id = $4 AND ST_Intersects(z.geom, ac.coverage)
-                    )
-                    SELECT 
-                        COALESCE(SUM(density * covered_area_km2), 0)::float as population
-                    FROM zone_intersection
-                )";
-                
-                auto results = std::make_shared<std::vector<OptimizationResult>>();
-                auto completed = std::make_shared<std::atomic<int>>(0);
-                int K = centroids.size();
+                // Créer les résultats directement (sans recalcul de couverture pour la rapidité)
+                std::vector<OptimizationResult> results;
+                double radius = req.radius;
+                double coverage_area_km2 = (3.14159 * radius * radius) / 1000000.0;
                 
                 for (size_t k = 0; k < centroids.size(); k++) {
-                    double lat = std::get<0>(centroids[k]);
-                    double lon = std::get<1>(centroids[k]);
-                    
-                    client->execSqlAsync(coverageSQL,
-                        [callback, results, completed, K, lat, lon](const Result& r) {
-                            OptimizationResult res;
-                            res.latitude = lat;
-                            res.longitude = lon;
-                            res.estimated_population = r[0]["population"].as<double>();
-                            res.score = static_cast<int>(res.estimated_population);
-                            
-                            results->push_back(res);
-                            
-                            if (++(*completed) == K) {
-                                std::sort(results->begin(), results->end(), 
-                                    [](const OptimizationResult& a, const OptimizationResult& b) {
-                                        return a.estimated_population > b.estimated_population;
-                                    });
-                                callback(*results, "");
-                            }
-                        },
-                        [callback](const DrogonDbException& e) {
-                            callback({}, e.base().what());
-                        },
-                        lat, lon, req.radius, req.zone_id.value()
-                    );
+                    OptimizationResult res;
+                    res.latitude = std::get<0>(centroids[k]);
+                    res.longitude = std::get<1>(centroids[k]);
+                    double weight = std::get<2>(centroids[k]);
+                    res.estimated_population = weight * coverage_area_km2;
+                    res.score = static_cast<int>(res.estimated_population);
+                    results.push_back(res);
                 }
+                
+                std::sort(results.begin(), results.end(), 
+                    [](const OptimizationResult& a, const OptimizationResult& b) {
+                        return a.estimated_population > b.estimated_population;
+                    });
+                
+                LOG_INFO << "🎯 K-Means completed: " << results.size() << " antennas positioned";
+                callback(results, "");
             },
             [callback](const DrogonDbException& e) {
+                LOG_ERROR << "🎯 K-Means error: " << e.base().what();
                 callback({}, e.base().what());
             },
             req.zone_id.value()
         );
     } else {
-        // Mode bbox : utilise la géométrie du bbox
+        // Mode bbox
+        LOG_INFO << "🎯 Starting K-Means optimization for bbox";
+        
         sql = R"(
-            WITH zone_data AS (
-                SELECT 
-                    ST_GeomFromText($1, 4326) as geom,
-                    COALESCE(
-                        (SELECT AVG(density) FROM zone WHERE ST_Intersects(geom, ST_GeomFromText($1, 4326))),
-                        1000.0
-                    ) as density,
-                    ST_Area(ST_GeomFromText($1, 4326)::geography) / 1000000.0 as area_km2
+            WITH bbox_geom AS (
+                SELECT ST_GeomFromText($1, 4326) as geom
             ),
-            -- Générer une grille de points pondérés par la densité
-            population_points AS (
+            density_cells AS (
                 SELECT 
-                    (ST_DumpPoints(
-                        ST_GeneratePoints(
-                            z.geom, 
-                            GREATEST(100, FLOOR(z.density * z.area_km2 / 100))::int
-                        )
-                    )).geom as point,
-                    z.density
-                FROM zone_data z
+                    ST_X(ST_Centroid(dz.geom)) as lon,
+                    ST_Y(ST_Centroid(dz.geom)) as lat,
+                    COALESCE(dz.density, 100.0) as weight
+                FROM zone dz, bbox_geom bg
+                WHERE dz.type = 'density_zone'
+                  AND ST_Intersects(dz.geom, bg.geom)
+                ORDER BY dz.density DESC NULLS LAST
+                LIMIT 500
+            ),
+            fallback_points AS (
+                SELECT 
+                    ST_X((ST_Dump(ST_GeneratePoints(bg.geom, 100))).geom) as lon,
+                    ST_Y((ST_Dump(ST_GeneratePoints(bg.geom, 100))).geom) as lat,
+                    (SELECT COALESCE(AVG(density), 100.0) FROM zone z WHERE ST_Intersects(z.geom, bg.geom) AND z.density IS NOT NULL) as weight
+                FROM bbox_geom bg
+                WHERE NOT EXISTS (SELECT 1 FROM density_cells LIMIT 1)
             )
-            SELECT 
-                ST_X(point) as lon,
-                ST_Y(point) as lat,
-                density as weight
-            FROM population_points
-            ORDER BY RANDOM()
-            LIMIT 1000
+            SELECT lon, lat, COALESCE(weight, 100.0) as weight 
+            FROM density_cells
+            UNION ALL
+            SELECT lon, lat, weight FROM fallback_points
         )";
         
         client->execSqlAsync(sql,
-            [callback, req, client](const Result& r) {
+            [callback, req](const Result& r) {
                 if (r.empty()) {
-                    callback({}, "Zone not found or empty");
+                    LOG_WARN << "🎯 K-Means (bbox): No data found";
+                    callback({}, "No density data available in bbox");
                     return;
                 }
 
-                // Calculer les centroïdes K-means
+                LOG_INFO << "🎯 K-Means (bbox): Processing " << r.size() << " data points";
+
                 std::vector<std::tuple<double, double, double>> centroids;
                 computeKMeansCentroids(r, req.antennas_count, centroids);
                 
-                // Calculer la population couverte par chaque centroïde (mode bbox)
-                std::string coverageSQL = R"(
-                    WITH antenna_coverage AS (
-                        SELECT 
-                            $1 as lat,
-                            $2 as lon,
-                            ST_Buffer(
-                                ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography,
-                                $3
-                            )::geometry as coverage
-                    ),
-                    bbox_geom AS (
-                        SELECT ST_GeomFromText($4, 4326) as geom
-                    ),
-                    zone_intersection AS (
-                        SELECT 
-                            z.density,
-                            ST_Area(
-                                ST_Intersection(z.geom, ac.coverage)::geography
-                            ) / 1000000.0 as covered_area_km2
-                        FROM zone z, antenna_coverage ac, bbox_geom bg
-                        WHERE ST_Intersects(z.geom, bg.geom) 
-                          AND ST_Intersects(z.geom, ac.coverage)
-                    )
-                    SELECT 
-                        COALESCE(SUM(density * covered_area_km2), 0)::float as population
-                    FROM zone_intersection
-                )";
-                
-                auto results = std::make_shared<std::vector<OptimizationResult>>();
-                auto completed = std::make_shared<std::atomic<int>>(0);
-                int K = centroids.size();
+                std::vector<OptimizationResult> results;
+                double radius = req.radius;
+                double coverage_area_km2 = (3.14159 * radius * radius) / 1000000.0;
                 
                 for (size_t k = 0; k < centroids.size(); k++) {
-                    double lat = std::get<0>(centroids[k]);
-                    double lon = std::get<1>(centroids[k]);
-                    
-                    client->execSqlAsync(coverageSQL,
-                        [callback, results, completed, K, lat, lon](const Result& r) {
-                            OptimizationResult res;
-                            res.latitude = lat;
-                            res.longitude = lon;
-                            res.estimated_population = r[0]["population"].as<double>();
-                            res.score = static_cast<int>(res.estimated_population);
-                            
-                            results->push_back(res);
-                            
-                            if (++(*completed) == K) {
-                                std::sort(results->begin(), results->end(), 
-                                    [](const OptimizationResult& a, const OptimizationResult& b) {
-                                        return a.estimated_population > b.estimated_population;
-                                    });
-                                callback(*results, "");
-                            }
-                        },
-                        [callback](const DrogonDbException& e) {
-                            callback({}, e.base().what());
-                        },
-                        lat, lon, req.radius, req.bbox_wkt.value()
-                    );
+                    OptimizationResult res;
+                    res.latitude = std::get<0>(centroids[k]);
+                    res.longitude = std::get<1>(centroids[k]);
+                    double weight = std::get<2>(centroids[k]);
+                    res.estimated_population = weight * coverage_area_km2;
+                    res.score = static_cast<int>(res.estimated_population);
+                    results.push_back(res);
                 }
+                
+                std::sort(results.begin(), results.end(), 
+                    [](const OptimizationResult& a, const OptimizationResult& b) {
+                        return a.estimated_population > b.estimated_population;
+                    });
+                
+                LOG_INFO << "🎯 K-Means (bbox) completed: " << results.size() << " antennas";
+                callback(results, "");
             },
             [callback](const DrogonDbException& e) {
+                LOG_ERROR << "🎯 K-Means (bbox) error: " << e.base().what();
                 callback({}, e.base().what());
             },
             req.bbox_wkt.value()
