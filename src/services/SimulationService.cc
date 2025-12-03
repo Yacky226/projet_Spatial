@@ -15,7 +15,9 @@ const double POWER_5G = 50.0; // ~100 Watts
 // Perte par obstacle (béton/brique moyen)
 const double OBSTACLE_LOSS = 25.0; // dB
 
-void SimulationService::checkSignalAtPosition(double lat, double lon, 
+void SimulationService::checkSignalAtPosition(double lat, double lon,
+                                              std::optional<int> operatorId,
+                                              std::optional<std::string> technology,
                                               std::function<void(const std::vector<SignalReport>&, const std::string&)> callback) {
     auto client = app().getDbClient();
 
@@ -24,6 +26,7 @@ void SimulationService::checkSignalAtPosition(double lat, double lon,
     // 2. Calcule la distance exacte
     // 3. Vérifie s'il y a un obstacle qui coupe la ligne (ST_Intersects avec une Ligne)
     // 4. Récupère les coordonnées de l'antenne
+    // 5. Filtre par opérateur et/ou technologie si spécifié
     std::string sql = R"(
         SELECT 
             a.id, 
@@ -41,6 +44,14 @@ void SimulationService::checkSignalAtPosition(double lat, double lon,
         FROM antenna a
         WHERE ST_DWithin(a.geom::geography, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography, 5000)
     )";
+
+    // Ajouter les filtres selon les paramètres
+    if (operatorId.has_value()) {
+        sql += " AND a.operator_id = " + std::to_string(operatorId.value());
+    }
+    if (technology.has_value() && !technology.value().empty()) {
+        sql += " AND a.technology = '" + technology.value() + "'";
+    }
 
     client->execSqlAsync(sql, 
         [callback](const Result &r) {

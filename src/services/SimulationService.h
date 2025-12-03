@@ -30,7 +30,9 @@ struct SignalReport {
 class SimulationService {
 public:
     // Calcule le signal pour un point GPS donné
-    static void checkSignalAtPosition(double lat, double lon, 
+    static void checkSignalAtPosition(double lat, double lon,
+                                      std::optional<int> operatorId,
+                                      std::optional<std::string> technology,
                                       std::function<void(const std::vector<SignalReport>&, const std::string&)> callback);
     
 private:

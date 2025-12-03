@@ -1,11 +1,35 @@
 #include "SimulationController.h"
 
-void SimulationController::checkSignal(const HttpRequestPtr& req, 
-                                       std::function<void (const HttpResponsePtr &)> &&callback,
-                                       double lat, double lon) {
-    
+void SimulationController::checkSignal(const HttpRequestPtr& req,
+                                       std::function<void (const HttpResponsePtr &)> &&callback) {
+
+    // Extraire les paramètres de la requête
+    auto& params = req->getParameters();
+
+    // Vérifier que les paramètres requis sont présents
+    if (params.find("lat") == params.end() || params.find("lon") == params.end()) {
+        auto resp = HttpResponse::newHttpResponse();
+        resp->setStatusCode(k400BadRequest);
+        resp->setBody("Missing required parameters: lat and lon");
+        callback(resp);
+        return;
+    }
+
+    double lat = std::stod(params.at("lat"));
+    double lon = std::stod(params.at("lon"));
+
+    std::optional<int> operatorId = std::nullopt;
+    if (params.find("operatorId") != params.end() && !params.at("operatorId").empty()) {
+        operatorId = std::stoi(params.at("operatorId"));
+    }
+
+    std::optional<std::string> technology = std::nullopt;
+    if (params.find("technology") != params.end() && !params.at("technology").empty()) {
+        technology = params.at("technology");
+    }
+
     // CORRECTION : Ajout de lat et lon dans la capture de la lambda [callback, lat, lon]
-    SimulationService::checkSignalAtPosition(lat, lon, 
+    SimulationService::checkSignalAtPosition(lat, lon, operatorId, technology,
         [callback, lat, lon](const std::vector<SignalReport>& reports, const std::string& err) {
             if (err.empty()) {
                 // On trie pour avoir la meilleure antenne en premier
