@@ -1,6 +1,21 @@
 #include "OptimizationController.h"
 #include "../models/OptimizationRequest.h"
 
+// Gestionnaire pour les requêtes OPTIONS (CORS preflight)
+void OptimizationController::handleOptions(const HttpRequestPtr& req, 
+                                          std::function<void (const HttpResponsePtr &)> &&callback) {
+    LOG_INFO << "🔄 CORS preflight request for optimization endpoint";
+    
+    auto resp = HttpResponse::newHttpResponse();
+    resp->setStatusCode(k200OK);
+    resp->addHeader("Access-Control-Allow-Origin", "*");
+    resp->addHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+    resp->addHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With");
+    resp->addHeader("Access-Control-Max-Age", "86400");
+    
+    callback(resp);
+}
+
 void OptimizationController::optimize(const HttpRequestPtr& req, std::function<void (const HttpResponsePtr &)> &&callback) {
     LOG_INFO << "🎯 Optimization request received";
     
