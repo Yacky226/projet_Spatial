@@ -115,3 +115,18 @@ void CacheService::delPattern(const std::string& pattern) {
         LOG_WARN << "Redis DEL pattern error for '" << pattern << "': " << e.what();
     }
 }
+
+bool CacheService::tryLock(const std::string& key, int ttl_seconds) {
+    if (!redis_) return false;
+    try {
+        auto result = redis_->set(key, "locked", std::chrono::seconds(ttl_seconds), sw::redis::UpdateType::NOT_EXIST);
+        return result;
+    } catch (const Error& e) {
+        LOG_WARN << "Redis lock error for key '" << key << "': " << e.what();
+        return false;
+    }
+}
+
+void CacheService::unlock(const std::string& key) {
+    del(key);
+}

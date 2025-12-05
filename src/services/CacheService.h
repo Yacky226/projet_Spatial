@@ -46,17 +46,17 @@ public:
         delPattern("zones:type:" + type + ":*");
     }
     
-    // Cache spécialisé pour clusters (TTL: 2min)
+    // Cache spécialisé pour clusters (TTL: 1h)
     void cacheClusters(const std::string& key, const Json::Value& data) {
-        setJson("clusters:" + key, data, 120);
+        setJson("clusters:" + key, data, 3600);
     }
     std::optional<Json::Value> getCachedClusters(const std::string& key) {
         return getJson("clusters:" + key);
     }
     
-    // Cache spécialisé pour antennes (TTL: 5min)
+    // Cache spécialisé pour antennes (TTL: 1h)
     void cacheAntennas(const std::string& key, const Json::Value& data) {
-        setJson("antennas:" + key, data, 300);
+        setJson("antennas:" + key, data, 3600);
     }
     std::optional<Json::Value> getCachedAntennas(const std::string& key) {
         return getJson("antennas:" + key);
@@ -65,6 +65,10 @@ public:
         delPattern("antennas:*");
         delPattern("clusters:*"); // Invalider aussi les clusters
     }
+    
+    // Mécanisme de verrouillage pour éviter les calculs concurrents
+    bool tryLock(const std::string& key, int ttl_seconds = 60);
+    void unlock(const std::string& key);
     
 private:
     CacheService() = default;

@@ -4,6 +4,8 @@
 #include "../utils/PaginationHelper.h"
 #include "../services/CacheService.h"
 #include <drogon/HttpResponse.h>
+#include <thread>
+#include <chrono>
 
 using namespace drogon;
 
@@ -756,10 +758,31 @@ void AntenneController::getClusteredAntennas(const HttpRequestPtr& req,
     
     LOG_INFO << "❌ Cache MISS: " << cacheKey;
     
+    // ========== VERROUILLAGE POUR ÉVITER LES CALCULS CONCURRENTS ==========
+    std::string lockKey = "lock:" + cacheKey;
+    bool hasLock = CacheService::getInstance().tryLock(lockKey, 60);
+    
+    if (!hasLock) {
+        // Si lock pas acquis, attendre un peu et revérifier le cache
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        auto retryCached = CacheService::getInstance().getCachedClusters(cacheKey);
+        if (retryCached) {
+            LOG_INFO << "🔄 Cache HIT after lock retry: " << cacheKey;
+            auto resp = HttpResponse::newHttpJsonResponse(*retryCached);
+            resp->addHeader("Content-Type", "application/geo+json");
+            resp->addHeader("X-Cache", "HIT-RETRY");
+            resp->addHeader("Cache-Control", "public, max-age=120");
+            callback(resp);
+            return;
+        }
+        // Sinon, procéder sans lock pour éviter le blocage
+        LOG_WARN << "⚠️ Proceeding without lock for: " << cacheKey;
+    }
+    
     // ========== APPEL AU SERVICE ==========
     AntenneService::getClusteredAntennas(
         minLat, minLon, maxLat, maxLon, zoom, status, technology, operator_id,
-        [callback, zoom, minLat, minLon, maxLat, maxLon, cacheKey](const Json::Value& geojson, const std::string& err) {
+        [callback, zoom, minLat, minLon, maxLat, maxLon, cacheKey, hasLock, lockKey](const Json::Value& geojson, const std::string& err) {
             if (err.empty()) {
                 // Ajout de métadonnées utiles pour le debug et le monitoring
                 Json::Value response = geojson;
@@ -774,6 +797,11 @@ void AntenneController::getClusteredAntennas(const HttpRequestPtr& req,
                 CacheService::getInstance().cacheClusters(cacheKey, response);
                 LOG_INFO << "💾 Cached clusters: " << cacheKey;
                 
+                // Libérer le verrou
+                if (hasLock) {
+                    CacheService::getInstance().unlock(lockKey);
+                }
+                
                 auto resp = HttpResponse::newHttpJsonResponse(response);
                 resp->addHeader("Content-Type", "application/geo+json");
                 resp->addHeader("X-Cache", "MISS");
@@ -781,6 +809,11 @@ void AntenneController::getClusteredAntennas(const HttpRequestPtr& req,
                 
                 callback(resp);
             } else {
+                // Libérer le verrou en cas d'erreur
+                if (hasLock) {
+                    CacheService::getInstance().unlock(lockKey);
+                }
+                
                 auto errorDetails = ErrorHandler::analyzePostgresError(err);
                 ErrorHandler::logError("AntenneController::getClusteredAntennas", errorDetails);
                 auto resp = ErrorHandler::createErrorResponse(errorDetails);
