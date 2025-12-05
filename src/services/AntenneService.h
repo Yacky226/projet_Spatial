@@ -61,12 +61,6 @@ public:
     static void getGeoJSONInBBox(double minLat, double minLon, double maxLat, double maxLon,
                                 std::function<void(const Json::Value&, const std::string&)> callback);
     
-    static void getCoverageByOperator(int operator_id, double minLat, double minLon, double maxLat, double maxLon,
-                                     std::function<void(const Json::Value&, const std::string&)> callback);
-                                    
-    static void getVoronoiDiagram(
-        std::function<void(const Json::Value&, const std::string&)> callback);
-    
     // ========== CLUSTERING BACKEND (Sprint 1 Optimization) ==========
     /**
      * Clustering backend optimisé utilisant ST_SnapToGrid de PostGIS

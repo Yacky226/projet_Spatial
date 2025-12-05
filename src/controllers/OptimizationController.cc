@@ -87,14 +87,3 @@ void OptimizationController::optimize(const HttpRequestPtr& req, std::function<v
         });
     }
 }
-
-void OptimizationController::options(const HttpRequestPtr& req, std::function<void (const HttpResponsePtr &)> &&callback) {
-    auto resp = HttpResponse::newHttpResponse();
-    resp->setStatusCode(k200OK);
-    resp->addHeader("Access-Control-Allow-Origin", "*");
-    resp->addHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-    resp->addHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With");
-    resp->addHeader("Access-Control-Max-Age", "86400");
-    
-    callback(resp);
-}

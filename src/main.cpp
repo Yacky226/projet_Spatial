@@ -8,7 +8,7 @@ int main() {
 
     drogon::app().loadConfigFile("../config/config.json");
     
-    // Sprint 3: Initialiser Redis
+    // Initialisation du service de cache Redis
     std::string redisHost = std::getenv("REDIS_HOST") ? std::getenv("REDIS_HOST") : "localhost";
     int redisPort = std::getenv("REDIS_PORT") ? std::stoi(std::getenv("REDIS_PORT")) : 6379;
     std::string redisPass = std::getenv("REDIS_PASSWORD") ? std::getenv("REDIS_PASSWORD") : "";

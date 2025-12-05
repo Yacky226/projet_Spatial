@@ -11,7 +11,6 @@
    - [Zones](#-zones)
    - [Opérateurs](#-opérateurs)
    - [Relations](#-relations)
-   - [📊 Couverture (NOUVEAU)](#-couverture)
    - [📡 Simulation Radio (NOUVEAU)](#-simulation-radio)
    - [🎯 Optimisation (NOUVEAU)](#-optimisation)
 5. [Pagination](#-pagination)
@@ -31,7 +30,6 @@ API REST pour la gestion et la visualisation d'antennes 5G avec support PostGIS 
 - ✅ CRUD complet pour antennes, obstacles, zones et opérateurs
 - ✅ Recherche géographique (rayon, bounding box)
 - ✅ Export GeoJSON pour intégration Leaflet/Mapbox
-- ✅ **🆕 Analyse de couverture réseau (population, zones blanches)**
 - ✅ **🆕 Simulation de signal radio (FSPL, atténuation)**
 - ✅ **🆕 Optimisation de placement d'antennes (Greedy, K-means)**
 - ✅ **🆕 Diagrammes de Voronoi pour zones de service**
@@ -53,7 +51,6 @@ src/
 │   ├── OperatorController.cc
 │   ├── AntennaZoneController.cc
 │   ├── ZoneObstacleController.cc
-│   ├── CoverageController.cc      # 🆕 Analyse de couverture
 │   ├── SimulationController.cc    # 🆕 Simulation radio
 │   └── OptimizationController.cc  # 🆕 Placement optimal
 │
@@ -64,7 +61,6 @@ src/
 │   ├── OperatorService.cc
 │   ├── AntennaZoneService.cc
 │   ├── ZoneObstacleService.cc
-│   ├── CoverageService.cc         # 🆕 Calculs de couverture
 │   ├── SimulationService.cc       # 🆕 Modèle de propagation
 │   └── OptimizationService.cc     # 🆕 Algorithmes d'optimisation
 │
@@ -73,7 +69,6 @@ src/
 │   ├── Obstacle.h
 │   ├── Zone.h
 │   ├── Operator.h
-│   ├── CoverageResult.h           # 🆕
 │   ├── SignalSimulation.h         # 🆕
 │   └── OptimizationRequest.h      # 🆕
 │
@@ -135,17 +130,6 @@ struct Operator {
     std::string name;
     std::string contact_email;
     std::string contact_phone;
-};
-```
-
-### 🆕 CoverageResult
-
-```cpp
-struct CoverageResult {
-    int antenna_id;
-    double covered_population;
-    double coverage_percent;
-    std::string geojson;       // Zone de couverture
 };
 ```
 
@@ -692,129 +676,6 @@ Supprimer une association.
 
 ---
 
-## 🆕 📊 Couverture
-
-### **GET** `/api/coverage/antenna/{id}`
-
-Calculer la couverture d'une antenne spécifique.
-
-**Description:** Retourne la population couverte, le taux de couverture et la zone géographique couverte.
-
-**Response (200):**
-
-```json
-{
-  "success": true,
-  "data": {
-    "antenna_id": 1,
-    "covered_population": 15000,
-    "coverage_percent": 75.5,
-    "coverage_area_km2": 78.5,
-    "geojson": {
-      "type": "Polygon",
-      "coordinates": [...]
-    }
-  },
-  "timestamp": "2024-11-29T12:00:00Z"
-}
-```
-
-**Exemple cURL:**
-
-```bash
-curl http://localhost:8080/api/coverage/antenna/1
-```
-
----
-
-### **GET** `/api/coverage/white-zones/{zone_id}`
-
-Obtenir les zones blanches (non couvertes) en GeoJSON.
-
-**Description:** Retourne les polygones des zones sans couverture réseau.
-
-**Response (200):**
-
-```json
-{
-  "type": "FeatureCollection",
-  "features": [
-    {
-      "type": "Feature",
-      "geometry": {
-        "type": "Polygon",
-        "coordinates": [[[2.33, 48.85], ...]]
-      },
-      "properties": {
-        "zone_id": 1,
-        "population": 5000,
-        "area_km2": 12.3
-      }
-    }
-  ]
-}
-```
-
-**Utilisation Leaflet:**
-
-```javascript
-fetch("/api/coverage/white-zones/1")
-  .then((res) => res.json())
-  .then((data) => {
-    L.geoJSON(data, {
-      style: {
-        fillColor: "#ff0000",
-        fillOpacity: 0.4,
-        color: "#ff0000",
-        weight: 2,
-      },
-    })
-      .addTo(map)
-      .bindPopup("Zone blanche - Pas de couverture");
-  });
-```
-
----
-
-### **GET** `/api/coverage/stats`
-
-Statistiques globales de couverture.
-
-**Description:** Vue d'ensemble : nombre d'antennes, taux de couverture, population couverte.
-
-**Response (200):**
-
-```json
-{
-  "success": true,
-  "data": {
-    "antennas": {
-      "total": 150,
-      "active": 142,
-      "by_technology": {
-        "5G": 95,
-        "4G": 55
-      }
-    },
-    "coverage": {
-      "total_population": 500000,
-      "covered_population": 425000,
-      "coverage_percent": 85.0,
-      "total_area_km2": 1200.5
-    }
-  },
-  "timestamp": "2024-11-29T12:00:00Z"
-}
-```
-
-**Exemple cURL:**
-
-```bash
-curl http://localhost:8080/api/coverage/stats
-```
-
----
-
 ## 🆕 📡 Simulation Radio
 
 ### **GET** `/api/simulation/check`
@@ -1305,28 +1166,7 @@ fetch("http://localhost:8080/api/antennes/geojson")
 
 ---
 
-### 4. Afficher les zones blanches
-
-```javascript
-fetch("/api/coverage/white-zones/1")
-  .then((res) => res.json())
-  .then((data) => {
-    L.geoJSON(data, {
-      style: {
-        fillColor: "#ff0000",
-        fillOpacity: 0.5,
-        color: "#cc0000",
-        weight: 2,
-      },
-    })
-      .addTo(map)
-      .bindPopup("Zone blanche - Pas de couverture");
-  });
-```
-
----
-
-### 5. Simulation de signal interactive
+### 4. Simulation de signal interactive
 
 ```javascript
 let simulationLayer = L.layerGroup().addTo(map);
@@ -1431,48 +1271,7 @@ document.getElementById("optimizeBtn").addEventListener("click", function () {
 
 ---
 
-### 7. Dashboard de statistiques
-
-```javascript
-fetch("/api/coverage/stats")
-  .then((res) => res.json())
-  .then((data) => {
-    const stats = data.data;
-
-    document.getElementById("totalAntennas").textContent = stats.antennas.total;
-    document.getElementById("activeAntennas").textContent =
-      stats.antennas.active;
-    document.getElementById("coverage5G").textContent =
-      stats.antennas.by_technology["5G"];
-    document.getElementById("coveragePercent").textContent =
-      stats.coverage.coverage_percent.toFixed(1) + "%";
-    document.getElementById("coveredPopulation").textContent =
-      (stats.coverage.covered_population / 1000).toFixed(0) + "K";
-
-    // Diagramme circulaire
-    const ctx = document.getElementById("coverageChart").getContext("2d");
-    new Chart(ctx, {
-      type: "pie",
-      data: {
-        labels: ["Couvert", "Non couvert"],
-        datasets: [
-          {
-            data: [
-              stats.coverage.covered_population,
-              stats.coverage.total_population -
-                stats.coverage.covered_population,
-            ],
-            backgroundColor: ["#00ff00", "#ff0000"],
-          },
-        ],
-      },
-    });
-  });
-```
-
----
-
-### 8. Pagination
+### 6. Pagination
 
 ```bash
 # Page 2, 50 éléments par page
@@ -1541,14 +1340,12 @@ FSPL (dB) = 20·log₁₀(d) + 20·log₁₀(f) + 32.45
 - ✅ Pagination obligatoire au-delà de 100 éléments
 - ✅ Pool de connexions PostgreSQL (10 connexions)
 - ✅ Requêtes asynchrones (Drogon ORM)
-- ⚠️ Cache recommandé pour `/coverage/stats` (calculs lourds)
 - ⚠️ Optimisation K-means peut prendre 5-10s pour grandes zones
 
 ### Limites connues
 
 - Optimisation K-means : max 100 antennes
 - Simulation : calcule uniquement l'antenne la plus proche
-- Zones blanches : nécessite des données de population fiables
 - Diagramme de Voronoi : limité aux antennes actives
 
 ---
@@ -1592,10 +1389,10 @@ MIT License - voir fichier `LICENSE`
 
 ## 👥 Contributeurs
 
-- Développement initial : [Votre nom]
-- Algorithmes d'optimisation : [Équipe IA]
+- Développement initial : 
+- Algorithmes d'optimisation : 
 
 ---
 
-**Version:** 3.0.0  
-**Dernière mise à jour:** 29 novembre 2024
+**Version:** 3.1.0  
+**Dernière mise à jour:** 5 décembre 2025

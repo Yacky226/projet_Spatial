@@ -215,37 +215,6 @@ void ZoneController::getGeoJSON(const HttpRequestPtr& req, std::function<void (c
 }
 
 
-
-void ZoneController::getWhiteZones(const HttpRequestPtr& req, 
-                                  std::function<void (const HttpResponsePtr &)> &&callback, 
-                                  int zone_id, int operator_id) {
-    
-    // Validation basique
-    if (zone_id <= 0 || operator_id <= 0) {
-        auto resp = HttpResponse::newHttpResponse();
-        resp->setStatusCode(k400BadRequest);
-        resp->setBody(R"({"error": "Invalid zone_id or operator_id"})");
-        callback(resp);
-        return;
-    }
-
-    ZoneService::getWhiteZones(zone_id, operator_id, 
-        [callback](const Json::Value& geojson, const std::string& err) {
-            if (err.empty()) {
-                auto resp = HttpResponse::newHttpJsonResponse(geojson);
-                // Le calcul est lourd, on encourage le navigateur à le mettre en cache pour 1 minute
-                resp->addHeader("Cache-Control", "public, max-age=60");
-                callback(resp);
-            } else {
-                auto resp = HttpResponse::newHttpResponse();
-                resp->setStatusCode(k500InternalServerError);
-                resp->setBody(R"({"error": "Calculation failed", "details": ")" + err + R"("})");
-                callback(resp);
-            }
-        }
-    );
-}
-
 // ============================================================================
 // NOUVEAU: RECHERCHE DE ZONES (Sprint - Optimization Modal)
 // ============================================================================
@@ -334,14 +303,4 @@ void ZoneController::searchZones(const HttpRequestPtr& req, std::function<void (
             }
         }
     );
-}
-
-void ZoneController::optionsSearch(const HttpRequestPtr& req, std::function<void (const HttpResponsePtr &)> &&callback) {
-    auto resp = HttpResponse::newHttpResponse();
-    resp->setStatusCode(k200OK);
-    resp->addHeader("Access-Control-Allow-Origin", "*");
-    resp->addHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-    resp->addHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With");
-    resp->addHeader("Access-Control-Max-Age", "86400");
-    callback(resp);
 }

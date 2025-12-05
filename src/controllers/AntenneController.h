@@ -21,10 +21,6 @@ public:
         ADD_METHOD_TO(AntenneController::getGeoJSON, "/api/antennas/geojson", Get); // Supporte pagination
         ADD_METHOD_TO(AntenneController::getGeoJSONInRadius, "/api/antennas/geojson/radius?lat={1}&lon={2}&radius={3}", Get); // Supporte pagination
         ADD_METHOD_TO(AntenneController::getGeoJSONInBBox, "/api/antennas/geojson/bbox?minLat={1}&minLon={2}&maxLat={3}&maxLon={4}", Get);
-       ADD_METHOD_TO(AntenneController::getCoverage, "/api/coverage/operator/{1}?minLat={2}&minLon={3}&maxLat={4}&maxLon={5}", Get);
-        
-        // NOUVEAU : Voronoi diagram
-        ADD_METHOD_TO(AntenneController::getVoronoi, "/api/antennas/voronoi", Get);
         
         // NOUVEAU : Clustering backend optimisé (Sprint 1)
         ADD_METHOD_TO(AntenneController::getClusteredAntennas, "/api/antennas/clustered?minLat={1}&minLon={2}&maxLat={3}&maxLon={4}&zoom={5}", Get);
@@ -51,10 +47,6 @@ public:
                            double lat, double lon, double radius);
     void getGeoJSONInBBox(const HttpRequestPtr& req, std::function<void (const HttpResponsePtr &)> &&callback,
                          double minLat, double minLon, double maxLat, double maxLon);
-    
-   void getCoverage(const HttpRequestPtr& req, std::function<void (const HttpResponsePtr &)> &&callback,
-                     int operator_id, double minLat, double minLon, double maxLat, double maxLon);
-    void getVoronoi(const HttpRequestPtr& req, std::function<void (const HttpResponsePtr &)> &&callback);
     
     // ========== CLUSTERING (Sprint 1 Optimization) ==========
     // Clustering backend pour remplacer le clustering client-side
