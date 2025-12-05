@@ -37,6 +37,5 @@ public:
     
 private:
     // Helpers internes
-    static double calculateFSPL(double distanceKm, double freqMHz);
     static std::string getQualityLabel(double dbm);
 };
