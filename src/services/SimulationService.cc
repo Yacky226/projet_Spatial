@@ -4,15 +4,15 @@
 using namespace drogon;
 using namespace drogon::orm;
 
-// Fréquences standards (simplifiées pour la simulation)
+// Fréquences standards utilisées pour les calculs de simulation
 const double FREQ_4G = 2600.0; // MHz
 const double FREQ_5G = 3500.0; // MHz
 
-// Puissance d'émission standard (EIRP) en dBm
+// Puissance d'émission effective (EIRP) en dBm pour chaque technologie
 const double POWER_4G = 46.0; // ~40 Watts
 const double POWER_5G = 50.0; // ~100 Watts
 
-// Perte par obstacle (béton/brique moyen)
+// Atténuation moyenne causée par les obstacles en béton/brique
 const double OBSTACLE_LOSS = 25.0; // dB
 
 void SimulationService::checkSignalAtPosition(double lat, double lon,
@@ -21,12 +21,12 @@ void SimulationService::checkSignalAtPosition(double lat, double lon,
                                               std::function<void(const std::vector<SignalReport>&, const std::string&)> callback) {
     auto client = app().getDbClient();
 
-    // REQUÊTE MAGIQUE :
-    // 1. Trouve les antennes proches (< 5km)
-    // 2. Calcule la distance exacte
-    // 3. Vérifie s'il y a un obstacle qui coupe la ligne (ST_Intersects avec une Ligne)
-    // 4. Récupère les coordonnées de l'antenne
-    // 5. Filtre par opérateur et/ou technologie si spécifié
+    // Requête complexe pour analyser la couverture radio :
+    // - Recherche des antennes dans un rayon de 5km
+    // - Calcul précis des distances
+    // - Détection des obstacles sur la ligne de vue
+    // - Extraction des coordonnées des antennes
+    // - Filtrage optionnel par opérateur/technologie
     std::string sql = R"(
         SELECT 
             a.id, 
@@ -65,26 +65,26 @@ void SimulationService::checkSignalAtPosition(double lat, double lon,
                 report.distance_km = row["dist_km"].as<double>();
                 report.has_obstacle = row["blocked"].as<bool>();
 
-                // 1. Choix des paramètres selon la techno
+                // Sélection des paramètres radio selon la technologie
                 double freq = (report.technology == "5G") ? FREQ_5G : FREQ_4G;
                 double tx_power = (report.technology == "5G") ? POWER_5G : POWER_4G;
 
-                // 2. Calcul de la perte en espace libre (FSPL)
-                // Formule : 20*log10(d) + 20*log10(f) + 32.45
+                // Calcul de la perte en espace libre selon la formule standard
+                // FSPL = 20*log10(distance) + 20*log10(fréquence) + 32.45
                 double fspl = 20 * log10(report.distance_km) + 20 * log10(freq) + 32.45;
 
-                // 3. Bilan de liaison
+                // Calcul de la puissance reçue avant pénalités
                 double rx_power = tx_power - fspl;
 
-                // 4. Pénalité obstacle
+                // Application de la pénalité si un obstacle bloque la ligne de vue
                 if (report.has_obstacle) {
                     rx_power -= OBSTACLE_LOSS;
                 }
 
-                report.signal_strength_dbm = round(rx_power * 100) / 100; // Arrondi
+                report.signal_strength_dbm = round(rx_power * 100) / 100; // Arrondi à 2 décimales
                 report.signal_quality = getQualityLabel(report.signal_strength_dbm);
 
-                // On ne garde que si le signal est captable (> -120 dBm)
+                // Filtrage des signaux trop faibles (< -120 dBm = seuil de détection)
                 if (report.signal_strength_dbm > -120.0) {
                     reports.push_back(report);
                 }
@@ -97,9 +97,10 @@ void SimulationService::checkSignalAtPosition(double lat, double lon,
 }
 
 std::string SimulationService::getQualityLabel(double dbm) {
-    if (dbm >= -80) return "Excellent"; // 5 barres
-    if (dbm >= -95) return "Bon";       // 4 barres
-    if (dbm >= -105) return "Moyen";    // 3 barres
-    if (dbm >= -115) return "Faible";   // 1-2 barres
+    // Classification de la qualité du signal selon les seuils standard
+    if (dbm >= -80) return "Excellent"; // Signal très fort
+    if (dbm >= -95) return "Bon";       // Signal correct
+    if (dbm >= -105) return "Moyen";    // Signal acceptable
+    if (dbm >= -115) return "Faible";   // Signal faible mais utilisable
     return "Nul";                       // Pas de service
 }

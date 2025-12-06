@@ -1,7 +1,7 @@
 #include "OptimizationController.h"
 #include "../models/OptimizationRequest.h"
 
-// Gestionnaire pour les requêtes OPTIONS (CORS preflight)
+// Gestion des requêtes OPTIONS pour CORS
 void OptimizationController::handleOptions(const HttpRequestPtr& req, 
                                           std::function<void (const HttpResponsePtr &)> &&callback) {
     LOG_INFO << "🔄 CORS preflight request for optimization endpoint";
@@ -16,9 +16,11 @@ void OptimizationController::handleOptions(const HttpRequestPtr& req,
     callback(resp);
 }
 
+// Endpoint principal d'optimisation du placement d'antennes
 void OptimizationController::optimize(const HttpRequestPtr& req, std::function<void (const HttpResponsePtr &)> &&callback) {
     LOG_INFO << "🎯 Optimization request received";
     
+    // Parsing du JSON
     auto json = req->getJsonObject();
     if (!json) {
         auto resp = HttpResponse::newHttpResponse();
@@ -34,7 +36,7 @@ void OptimizationController::optimize(const HttpRequestPtr& req, std::function<v
              << ", antennas=" << request.antennas_count
              << ", radius=" << request.radius;
 
-    // Validation: zone_id XOR bbox_wkt
+    // Validation : soit zone_id soit bbox_wkt, pas les deux
     if (!request.isValid()) {
         auto resp = HttpResponse::newHttpResponse();
         resp->setStatusCode(k400BadRequest);
@@ -43,7 +45,7 @@ void OptimizationController::optimize(const HttpRequestPtr& req, std::function<v
         return;
     }
     
-    // Validation: antennas_count
+    // Validation du nombre d'antennes
     if (request.antennas_count <= 0) {
         auto resp = HttpResponse::newHttpResponse();
         resp->setStatusCode(k400BadRequest);

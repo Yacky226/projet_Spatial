@@ -8,6 +8,7 @@
 
 using namespace drogon;
 
+// Gestion centralisée des erreurs pour l'API
 class ErrorHandler {
 public:
     // Types d'erreurs

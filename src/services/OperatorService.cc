@@ -4,6 +4,7 @@ using namespace drogon::orm;
 
 void OperatorService::getAll(std::function<void(const std::vector<OperatorModel>&, const std::string&)> callback) {
     auto client = app().getDbClient();
+    // Récupération de tous les opérateurs triés par ID
     client->execSqlAsync("SELECT id, name FROM operator ORDER BY id",
         [callback](const Result &r) {
             std::vector<OperatorModel> list;

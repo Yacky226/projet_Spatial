@@ -1,7 +1,7 @@
 #include "ZoneController.h"
 #include "../services/CacheService.h"
 
-// 3.5. Read By Type
+// 1. Read By Type
 void ZoneController::getByType(const HttpRequestPtr& req, std::function<void (const HttpResponsePtr &)> &&callback, const std::string& type) {
     ZoneService::getByType(type, [callback](const std::vector<ZoneModel>& list, const std::string& err) {
         if(err.empty()){
@@ -18,7 +18,7 @@ void ZoneController::getByType(const HttpRequestPtr& req, std::function<void (co
     });
 }
 
-// 3.6. Read By Type Simplified (Sprint 2 - Optimization)
+// 2. Read By Type Simplified (Sprint 2 - Optimization)
 /**
  * Endpoint pour récupérer les zones par type avec simplification géométrique
  * 
@@ -107,7 +107,7 @@ void ZoneController::getGeoJSON(const HttpRequestPtr& req, std::function<void (c
 
 
 // ============================================================================
-// NOUVEAU: RECHERCHE DE ZONES (Sprint - Optimization Modal)
+//  3. RECHERCHE DE ZONES
 // ============================================================================
 /**
  * Endpoint pour rechercher des zones par type et query string

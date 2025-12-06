@@ -6,10 +6,10 @@
 #include <string>
 
 using namespace drogon;
-using namespace drogon::orm;// ============================================================================
-// NOUVEAU : CLUSTERED ANTENNAS (Sprint 1 - Backend Clustering Optimization)
+using namespace drogon::orm;
+
 // ============================================================================
-// NOUVEAU : CLUSTERED ANTENNAS (Sprint 1 - Backend Clustering Optimization)
+// CLUSTERED ANTENNAS 
 // ============================================================================
 /**
  * Clustering backend utilisant ST_SnapToGrid pour grouper les antennes proches
@@ -34,8 +34,8 @@ void AntenneService::getClusteredAntennas(
 {
     auto client = app().getDbClient();
     
-    // ========== CALCUL DE LA TAILLE DE GRILLE SELON LE ZOOM ==========
-    // Plus le zoom est élevé, plus la grille est fine (plus de détails)
+    // Calcul de la taille de grille selon le zoom
+    // Plus le zoom est élevé, plus la grille est fine
     double gridSize;
     if (zoom <= 5) {
         gridSize = 1.0;      // Zoom monde/continents: ~111 km
@@ -49,7 +49,7 @@ void AntenneService::getClusteredAntennas(
         gridSize = 0.001;    // Zoom quartiers: ~111 m
     }
     
-    // ========== CONSTRUCTION DE LA CLAUSE WHERE POUR LES FILTRES ==========
+    // Construction de la clause WHERE pour les filtres
     std::vector<std::string> whereClauses;
     whereClauses.push_back("geom && ST_MakeEnvelope($1, $2, $3, $4, 4326)");
     
@@ -76,9 +76,8 @@ void AntenneService::getClusteredAntennas(
         whereClause += whereClauses[i];
     }
     
-    // ========== REQUÊTE SQL AVEC CLUSTERING ==========
+    // Requête SQL avec clustering
     // Utilise ST_SnapToGrid pour regrouper les points proches
-    // GROUP BY sur la grille pour compter les antennes par cellule
     std::string sql = R"(
         WITH snapped AS (
             SELECT 

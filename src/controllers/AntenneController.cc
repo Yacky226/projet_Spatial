@@ -10,7 +10,7 @@ using namespace drogon;
 
 
 // ============================================================================
-// 10. GET CLUSTERED ANTENNAS (Sprint 1 Optimization)
+// 1. GET CLUSTERED ANTENNAS (Sprint 1 Optimization)
 // ============================================================================
 /**
  * Endpoint de clustering backend pour remplacer le clustering client-side
@@ -150,7 +150,7 @@ void AntenneController::getClusteredAntennas(const HttpRequestPtr& req,
                 response["metadata"]["bbox"]["maxLat"] = maxLat;
                 response["metadata"]["bbox"]["maxLon"] = maxLon;
                 
-                // Sprint 3: Mise en cache (TTL 2min pour clusters)
+                // Sprint 3: Mise en cache (TTL 1h pour clusters)
                 CacheService::getInstance().cacheClusters(cacheKey, response);
                 LOG_INFO << "💾 Cached clusters: " << cacheKey;
                 
@@ -181,7 +181,7 @@ void AntenneController::getClusteredAntennas(const HttpRequestPtr& req,
 }
 
 // ============================================================================
-// 10. GET SIMPLIFIED COVERAGE (Sprint 4 Performance - Navigation Fluide)
+// 2. GET SIMPLIFIED COVERAGE (Sprint 4 Performance - Navigation Fluide)
 // ============================================================================
 void AntenneController::getSimplifiedCoverage(
     const HttpRequestPtr& req,

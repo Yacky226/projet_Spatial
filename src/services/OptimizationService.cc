@@ -11,19 +11,19 @@ void OptimizationService::optimizeGreedy(const OptimizationRequest& req,
                                          std::function<void(const std::vector<OptimizationResult>&, const std::string&)> callback) {
     auto client = app().getDbClient();
 
-    // ALGORITHME GREEDY OPTIMISÉ :
-    // 1. Récupérer les density_zones (cellules de densité de 250m) dans la zone cible
-    // 2. Ces zones ont déjà une densité calculée
-    // 3. Pour chaque cellule, vérifier qu'elle n'est pas sur un obstacle majeur
-    // 4. Retourner les meilleures positions
+    // Algorithme glouton optimisé pour le placement d'antennes :
+    // - Utilise les zones de densité existantes (cellules de 250m)
+    // - Ces zones ont déjà une densité de population calculée
+    // - Filtre les positions sur obstacles majeurs
+    // - Retourne les meilleures positions par couverture de population
 
     std::string sql;
     
     if (req.isZoneMode()) {
         LOG_INFO << "🎯 Starting Greedy optimization for zone_id=" << req.zone_id.value();
         
-        // Utiliser les density_zones existantes (beaucoup plus rapide)
-        // Ou générer des points sur la zone simplifiée
+        // Requête SQL complexe utilisant les density_zones existantes pour rapidité
+        // Fallback sur génération de points si pas de données de densité
         sql = R"(
             WITH target_zone AS (
                 SELECT id, geom, COALESCE(density, 100.0) as density
@@ -183,6 +183,9 @@ static void computeKMeansCentroids(
     int K,
     std::vector<std::tuple<double, double, double>>& centroids_out
 ) {
+    // Implémentation de l'algorithme K-means avec initialisation K-means++
+    // Pondère les centroïdes par la densité de population pour optimisation
+    
     struct Point {
         double lat, lon, weight;
     };
@@ -198,13 +201,14 @@ static void computeKMeansCentroids(
 
     std::vector<Point> centroids(K);
     
-    // Initialisation : K-means++
+    // Initialisation intelligente K-means++ pour éviter les clusters vides
     std::random_device rd;
     std::mt19937 gen(rd());
     std::uniform_int_distribution<> dis(0, points.size() - 1);
     
     centroids[0] = points[dis(gen)];
     
+    // Sélection des centroïdes suivants selon la probabilité basée sur la distance
     for (int k = 1; k < K; k++) {
         std::vector<double> distances(points.size());
         double sum = 0.0;
@@ -234,7 +238,7 @@ static void computeKMeansCentroids(
         }
     }
     
-    // Itérations K-means
+    // Itérations principales de l'algorithme K-means (max 50 itérations)
     bool changed = true;
     int maxIter = 50;
     std::vector<int> assignments(points.size());
@@ -242,7 +246,7 @@ static void computeKMeansCentroids(
     for (int iter = 0; iter < maxIter && changed; iter++) {
         changed = false;
         
-        // Assignment step
+        // Étape d'assignation : chaque point va au centroïde le plus proche
         for (size_t i = 0; i < points.size(); i++) {
             double minDist = std::numeric_limits<double>::max();
             int bestCluster = 0;
@@ -264,7 +268,7 @@ static void computeKMeansCentroids(
             }
         }
         
-        // Update step
+        // Étape de mise à jour : recalculer les centroïdes pondérés par la densité
         std::vector<double> sumLat(K, 0.0);
         std::vector<double> sumLon(K, 0.0);
         std::vector<double> sumWeight(K, 0.0);
@@ -284,7 +288,7 @@ static void computeKMeansCentroids(
         }
     }
     
-    // Convertir en tuples
+    // Conversion des centroïdes en format de sortie
     for (int k = 0; k < K; k++) {
         centroids_out.push_back(std::make_tuple(centroids[k].lat, centroids[k].lon, centroids[k].weight));
     }
@@ -297,7 +301,9 @@ void OptimizationService::optimizeKMeans(const OptimizationRequest& req,
                                          std::function<void(const std::vector<OptimizationResult>&, const std::string&)> callback) {
     auto client = app().getDbClient();
 
-    // Utiliser les density_zones existantes comme données d'entrée pour K-means
+    // Algorithme K-means pour optimisation du placement d'antennes
+    // Utilise les données de densité existantes comme points d'entrée
+
     std::string sql;
     
     if (req.isZoneMode()) {

@@ -6,15 +6,14 @@
 
 using namespace drogon;
 
-// ============================================================================
-// GET OBSTACLES BY BOUNDING BOX
-// ============================================================================
+// Récupération des obstacles dans une bounding box
 void ObstacleController::getByBoundingBox(const HttpRequestPtr& req, std::function<void (const HttpResponsePtr &)> &&callback) {
+    // Récupération des paramètres
     auto bbox = req->getParameter("bbox"); // Format: minLon,minLat,maxLon,maxLat
-    auto type = req->getOptionalParameter<std::string>("type"); // Optional filter by type
-    int zoom = req->getOptionalParameter<int>("zoom").value_or(10); // Default zoom 10
+    auto type = req->getOptionalParameter<std::string>("type"); // Filtre optionnel par type
+    int zoom = req->getOptionalParameter<int>("zoom").value_or(10); // Zoom par défaut 10
 
-    // Parse bbox into coordinates (robust)
+    // Parsing de la bbox en coordonnées
     std::vector<std::string> coords;
     std::stringstream ss(bbox);
     std::string item;
@@ -30,6 +29,7 @@ void ObstacleController::getByBoundingBox(const HttpRequestPtr& req, std::functi
         return;
     }
 
+    // Fonction pour trimmer les espaces
     auto trim = [](const std::string &s) {
         const char* ws = " \t\n\r";
         size_t b = s.find_first_not_of(ws);

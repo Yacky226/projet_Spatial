@@ -6,6 +6,7 @@
 #include <regex>
 #include <optional>
 
+// Utilitaires de validation pour les paramètres d'API
 class Validator {
 public:
     struct ValidationError {

@@ -1,12 +1,13 @@
 #include "SimulationController.h"
 
+// Vérification du signal radio à une position donnée
 void SimulationController::checkSignal(const HttpRequestPtr& req,
                                        std::function<void (const HttpResponsePtr &)> &&callback) {
 
-    // Extraire les paramètres de la requête
+    // Récupération des paramètres
     auto& params = req->getParameters();
 
-    // Vérifier que les paramètres requis sont présents
+    // Vérification des params obligatoires
     if (params.find("lat") == params.end() || params.find("lon") == params.end()) {
         auto resp = HttpResponse::newHttpResponse();
         resp->setStatusCode(k400BadRequest);
@@ -15,9 +16,11 @@ void SimulationController::checkSignal(const HttpRequestPtr& req,
         return;
     }
 
+    // Conversion des coordonnées
     double lat = std::stod(params.at("lat"));
     double lon = std::stod(params.at("lon"));
 
+    // Params optionnels
     std::optional<int> operatorId = std::nullopt;
     if (params.find("operatorId") != params.end() && !params.at("operatorId").empty()) {
         operatorId = std::stoi(params.at("operatorId"));
@@ -28,17 +31,18 @@ void SimulationController::checkSignal(const HttpRequestPtr& req,
         technology = params.at("technology");
     }
 
-    // CORRECTION : Ajout de lat et lon dans la capture de la lambda [callback, lat, lon]
+    // Appel du service
     SimulationService::checkSignalAtPosition(lat, lon, operatorId, technology,
         [callback, lat, lon](const std::vector<SignalReport>& reports, const std::string& err) {
             if (err.empty()) {
-                // On trie pour avoir la meilleure antenne en premier
+                // Tri par puissance décroissante
                 auto sortedReports = reports;
                 std::sort(sortedReports.begin(), sortedReports.end(), 
                     [](const SignalReport& a, const SignalReport& b) {
                         return a.signal_strength_dbm > b.signal_strength_dbm;
                     });
 
+                // Construction de la réponse JSON
                 Json::Value jsonArr(Json::arrayValue);
                 for(const auto& r : sortedReports) {
                     jsonArr.append(r.toJson());

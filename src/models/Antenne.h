@@ -2,7 +2,8 @@
 #include <drogon/drogon.h>
 #include <string>
 
-// Représentation C++ de la table 'antenna'
+// Structure pour représenter une antenne dans l'API
+// Correspond à la table 'antenna' en base de données
 struct Antenna {
     int id = -1;
     double coverage_radius;
@@ -16,7 +17,7 @@ struct Antenna {
     double latitude;
     double longitude;
 
-    // Conversion en JSON pour la réponse API
+    // Sérialisation en JSON pour l'API
     Json::Value toJson() const {
         Json::Value ret;
         if(id != -1) ret["id"] = id;

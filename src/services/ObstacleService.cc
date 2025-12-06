@@ -8,11 +8,11 @@
 void ObstacleService::getByBoundingBox(double minLon, double minLat, double maxLon, double maxLat, int zoom, const std::optional<std::string>& type, const std::function<void(const Json::Value&, const std::string&)>& callback) {
     auto dbClient = drogon::app().getDbClient();
 
-    // Calcul de la tolérance de simplification selon le zoom
+    // Ajustement de la tolérance de simplification selon le niveau de zoom pour optimiser les performances
     double tolerance;
     int limit;
     if (zoom <= 6) {
-        tolerance = 0.05;  // Simplification agressive à bas zoom
+        tolerance = 0.05;  // Simplification forte à bas zoom pour réduire la charge
         limit = 2000;
     } else if (zoom <= 10) {
         tolerance = 0.01;
@@ -21,13 +21,13 @@ void ObstacleService::getByBoundingBox(double minLon, double minLat, double maxL
         tolerance = 0.005;
         limit = 10000;
     } else {
-        tolerance = 0.001; // Détails à haut zoom
+        tolerance = 0.001; // Détails préservés à haut zoom
         limit = 20000;
     }
 
     LOG_INFO << "Obstacles query: zoom=" << zoom << ", tolerance=" << tolerance << ", limit=" << limit;
 
-    // Construct SQL query with simplification and limit
+    // Construction de la requête SQL avec simplification géométrique et limitation du nombre de résultats
     std::string sql = R"(SELECT jsonb_build_object(
         'type', 'FeatureCollection',
         'features', jsonb_agg(jsonb_build_object(
@@ -60,7 +60,7 @@ void ObstacleService::getByBoundingBox(double minLon, double minLat, double maxL
                             Json::Value parsed;
                             std::string errs;
                             if (reader->parse(geoString.c_str(), geoString.c_str() + geoString.length(), &parsed, &errs)) {
-                                // Ensure 'features' is always an array (Postgres jsonb_agg returns null when no rows)
+                                // S'assurer que 'features' est toujours un tableau (jsonb_agg retourne null si pas de résultats)
                                 if (parsed.isObject() && parsed["features"].isNull()) {
                                     parsed["features"] = Json::Value(Json::arrayValue);
                                 }
@@ -73,6 +73,7 @@ void ObstacleService::getByBoundingBox(double minLon, double minLat, double maxL
                                 callback(emptyGeoJSON, "");
                             }
                         } else {
+                            // Retourner une collection GeoJSON vide si aucun résultat
                             Json::Value emptyGeoJSON;
                             emptyGeoJSON["type"] = "FeatureCollection";
                             emptyGeoJSON["features"] = Json::Value(Json::arrayValue);
@@ -80,11 +81,13 @@ void ObstacleService::getByBoundingBox(double minLon, double minLat, double maxL
                         }
             },
             [callback](const drogon::orm::DrogonDbException& e) {
+                // Gestion des erreurs de base de données
                 callback(Json::Value(), e.base().what());
             },
             minLon, minLat, maxLon, maxLat, type.value()
         );
     } else {
+        // Requête sans filtrage par type
         dbClient->execSqlAsync(
             sql,
             [callback](const drogon::orm::Result& result) {
@@ -96,7 +99,7 @@ void ObstacleService::getByBoundingBox(double minLon, double minLat, double maxL
                     Json::Value parsed;
                     std::string errs;
                     if (reader->parse(geoString.c_str(), geoString.c_str() + geoString.length(), &parsed, &errs)) {
-                                // Ensure 'features' is an array (not null) for GeoJSON compliance
+                                // S'assurer que 'features' est un tableau pour la conformité GeoJSON
                                 if (parsed.isObject() && parsed["features"].isNull()) {
                                     parsed["features"] = Json::Value(Json::arrayValue);
                                 }
@@ -109,6 +112,7 @@ void ObstacleService::getByBoundingBox(double minLon, double minLat, double maxL
                         callback(emptyGeoJSON, "");
                     }
                 } else {
+                    // Collection GeoJSON vide si aucun obstacle trouvé
                     Json::Value emptyGeoJSON;
                     emptyGeoJSON["type"] = "FeatureCollection";
                     emptyGeoJSON["features"] = Json::Value(Json::arrayValue);
@@ -116,6 +120,7 @@ void ObstacleService::getByBoundingBox(double minLon, double minLat, double maxL
                 }
             },
             [callback](const drogon::orm::DrogonDbException& e) {
+                // Gestion des erreurs de base de données
                 callback(Json::Value(), e.base().what());
             },
             minLon, minLat, maxLon, maxLat

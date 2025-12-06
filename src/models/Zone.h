@@ -2,13 +2,15 @@
 #include <drogon/drogon.h>
 #include <string>
 
+// Structure représentant une zone géographique dans le système
+// Utilisée pour la hiérarchie administrative et les zones de couverture
 struct ZoneModel {
-    int id = -1;
-    std::string name;
-    std::string type; // 'country', 'region', 'province', 'coverage', 'white_zone'
-    double density = 0.0;
-    std::string wkt_geometry; // Format texte WKT pour PostGIS
-    int parent_id = 0; // 0 signifie "pas de parent"
+    int id = -1;                    // Identifiant unique (-1 si non défini)
+    std::string name;               // Nom de la zone
+    std::string type;               // Type de zone : country, region, province, coverage, white_zone
+    double density = 0.0;           // Densité de population (habitants/km²)
+    std::string wkt_geometry;       // Géométrie au format WKT pour PostGIS
+    int parent_id = 0;              // ID de la zone parente (0 = racine)
 
     Json::Value toJson() const {
         Json::Value ret;

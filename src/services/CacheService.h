@@ -14,7 +14,7 @@ using namespace sw::redis;
  * Gère le cache backend pour réduire la charge DB de 70%
  * TTL adaptatifs selon le type de données :
  * - Zones: 1h (données rarement modifiées)
- * - Clusters: 2min (données dynamiques)
+ * - Clusters: 1h (données dynamiques)
  * - Antennas: 5min (équilibre)
  */
 class CacheService {

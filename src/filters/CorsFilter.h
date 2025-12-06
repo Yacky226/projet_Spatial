@@ -3,6 +3,7 @@
 
 using namespace drogon;
 
+// Filtre HTTP pour gérer les headers CORS
 class CorsFilter : public HttpFilter<CorsFilter> {
 public:
     CorsFilter() {}

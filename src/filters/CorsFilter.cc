@@ -2,6 +2,7 @@
 
 using namespace drogon;
 
+// Filtrage des requêtes pour gérer CORS
 void CorsFilter::doFilter(const HttpRequestPtr &req,
                           FilterCallback &&fcb,
                           FilterChainCallback &&fccb) {

@@ -2,7 +2,7 @@
 using namespace drogon;
 using namespace drogon::orm;
 
-// 3.5. READ BY TYPE
+// Récupération des zones par type
 void ZoneService::getByType(const std::string& type, std::function<void(const std::vector<ZoneModel>&, const std::string&)> callback) {
     auto client = app().getDbClient();
     std::string sql = "SELECT id, name, type, density, parent_id, ST_AsText(geom) as wkt FROM zone WHERE type = $1::zone_type ORDER BY name";
@@ -23,6 +23,7 @@ void ZoneService::getByType(const std::string& type, std::function<void(const st
     }, [callback](const DrogonDbException &e) { callback({}, e.base().what()); }, type);
 }
 
+// Récupération de toutes les zones en GeoJSON
 void ZoneService::getAllGeoJSON(std::function<void(const Json::Value&, const std::string&)> callback) {
     auto client = app().getDbClient();
     

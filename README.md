@@ -108,8 +108,23 @@ backend/
 │
 ├── CMakeLists.txt                        # Configuration build
 ├── Dockerfile                            # Image Docker API
-└── docker-compose.yml                    # Orchestration Redis + API
+├── docker-compose.yml                    # Orchestration Redis + API
+└── ClassDiagram.png                      # Diagramme de classes UML
 ```
+
+### Diagramme de classes
+
+Le diagramme de classes UML ci-dessous illustre l'architecture orientée objet du backend :
+
+![Diagramme de classes](ClassDiagram.png)
+
+**Légende du diagramme :**
+- **Classe** : Représente une entité du système (ex: Antenne, Zone, Obstacle).
+- **Attribut** : Propriété d'une classe avec son type (ex: +nom: string, +geom: Point).
+- **Stéréotype** : Extension UML indiquant le rôle (ex: «FeatureType» pour entités géographiques, «GeometryProperty» pour géométries).
+- **Association** : Relation entre classes avec nom et multiplicité (ex: "appartient à" 1..* → 1).
+- **Relation spatiale** : Association avec stéréotype «SpatialRelationship» pour relations géographiques (contient, appartient à).
+- **Multiplicité** : Nombre d'instances possibles (1, 0..*, 1..*).
 
 ### Architecture en couches
 
@@ -1092,8 +1107,46 @@ auto resp = ErrorHandler::createGenericErrorResponse(
 - **Docker Engine** 20.10+
 - **Docker Compose** 2.0+
 - **PostgreSQL** 14+ avec **PostGIS** 3.3+ (externe)
+- **pgAdmin** (recommandé pour la restauration de la base de données)
 - **4GB RAM** minimum
 - **Ports disponibles** : 8082 (API), 6379 (Redis)
+
+### Configuration de la base de données
+
+#### Restauration de la base de données
+
+La base de données doit être restaurée à partir d'un fichier de sauvegarde `.backup` fourni.
+
+**Téléchargement du fichier de sauvegarde :**
+- Téléchargez le fichier `database_backup.7z` depuis [ce lien Google Drive](https://drive.google.com/file/d/1AKfLN9fUErug7Es2NjNgSFh57Tp1M55X/view?usp=sharing).
+
+**Étapes de restauration avec pgAdmin :**
+
+1. **Installer et ouvrir pgAdmin**
+   - Téléchargez pgAdmin depuis https://www.pgadmin.org/
+   - Lancez pgAdmin et connectez-vous à votre serveur PostgreSQL
+
+2. **Créer une nouvelle base de données**
+   - Dans l'arborescence de gauche, faites un clic droit sur "Databases"
+   - Sélectionnez "Create" > "Database..."
+   - Nommez la base de données `NetworkCoverageOptimization`
+   - Cliquez sur "Save"
+
+3. **Restaurer la sauvegarde**
+   - Faites un clic droit sur la base de données `NetworkCoverageOptimization`
+   - Sélectionnez "Restore..."
+   - Dans l'onglet "General", cliquez sur l'icône dossier à côté de "Filename"
+   - Sélectionnez le fichier `database_backup.backup` (décompressez d'abord le .7z)
+   - Cliquez sur "Restore" pour lancer la restauration
+
+   **⏱️ Note :** La restauration peut prendre entre 5 et 10 minutes selon la puissance de votre machine et la taille du fichier de sauvegarde.
+
+4. **Vérifier la restauration**
+   - Actualisez la base de données dans pgAdmin
+   - Vérifiez que les tables sont présentes (antennes, zones, obstacles, operateurs, etc.)
+   - Vérifiez que PostGIS est activé en exécutant : `SELECT PostGIS_version();`
+
+**Note :** Assurez-vous que l'utilisateur PostgreSQL a les droits nécessaires pour créer des extensions PostGIS.
 
 ### Démarrage rapide
 
