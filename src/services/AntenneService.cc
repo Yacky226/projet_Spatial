@@ -65,7 +65,7 @@ void AntenneService::getClusteredAntennas(
         whereClauses.push_back("technology = $" + std::to_string(paramIndex++) + "::technology_type");
         techParam = technology;
     }
-    if (operator_id > 0) {
+    if (operator_id >= 0) {
         whereClauses.push_back("operator_id = $" + std::to_string(paramIndex++));
         operatorParam = operator_id;
     }
@@ -195,19 +195,19 @@ void AntenneService::getClusteredAntennas(
     
     // ========== APPEL AVEC LES BONS PARAMÈTRES SELON LES FILTRES ==========
     // On doit passer les paramètres dans l'ordre: bbox, puis filtres optionnels
-    if (!status.empty() && !technology.empty() && operator_id > 0) {
+    if (!status.empty() && !technology.empty() && operator_id >= 0) {
         executeQuery(minLon, minLat, maxLon, maxLat, statusParam, techParam, operatorParam);
     } else if (!status.empty() && !technology.empty()) {
         executeQuery(minLon, minLat, maxLon, maxLat, statusParam, techParam);
-    } else if (!status.empty() && operator_id > 0) {
+    } else if (!status.empty() && operator_id >= 0) {
         executeQuery(minLon, minLat, maxLon, maxLat, statusParam, operatorParam);
-    } else if (!technology.empty() && operator_id > 0) {
+    } else if (!technology.empty() && operator_id >= 0) {
         executeQuery(minLon, minLat, maxLon, maxLat, techParam, operatorParam);
     } else if (!status.empty()) {
         executeQuery(minLon, minLat, maxLon, maxLat, statusParam);
     } else if (!technology.empty()) {
         executeQuery(minLon, minLat, maxLon, maxLat, techParam);
-    } else if (operator_id > 0) {
+    } else if (operator_id >= 0) {
         executeQuery(minLon, minLat, maxLon, maxLat, operatorParam);
     } else {
         executeQuery(minLon, minLat, maxLon, maxLat);
@@ -247,7 +247,7 @@ void AntenneService::getSimplifiedCoverage(
     int paramIndex = 7; // $1-$6 déjà utilisés
     std::string operatorFilter, techFilter;
     
-    if (operator_id > 0) {
+    if (operator_id >= 0) {
         whereClauses.push_back("operator_id = $" + std::to_string(paramIndex++));
         operatorFilter = std::to_string(operator_id);
     }
@@ -351,9 +351,9 @@ void AntenneService::getSimplifiedCoverage(
     };
     
     // Appeler avec les bons paramètres selon filtres
-    if (operator_id > 0 && !technology.empty()) {
+    if (operator_id >= 0 && !technology.empty()) {
         executeQuery(minLon, minLat, maxLon, maxLat, tolerance, zoom, operator_id, technology);
-    } else if (operator_id > 0) {
+    } else if (operator_id >= 0) {
         executeQuery(minLon, minLat, maxLon, maxLat, tolerance, zoom, operator_id);
     } else if (!technology.empty()) {
         executeQuery(minLon, minLat, maxLon, maxLat, tolerance, zoom, technology);

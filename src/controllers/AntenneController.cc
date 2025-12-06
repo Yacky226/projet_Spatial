@@ -68,7 +68,7 @@ void AntenneController::getClusteredAntennas(const HttpRequestPtr& req,
     // ========== EXTRACTION DES FILTRES OPTIONNELS ==========
     std::string status = req->getOptionalParameter<std::string>("status").value_or("");
     std::string technology = req->getOptionalParameter<std::string>("technology").value_or("");
-    int operator_id = req->getOptionalParameter<int>("operator_id").value_or(0);
+    int operator_id = req->getOptionalParameter<int>("operator_id").value_or(-1);
     
     // Validation des filtres si fournis
     if (!status.empty() && !Validator::isValidStatus(status)) {
@@ -98,7 +98,7 @@ void AntenneController::getClusteredAntennas(const HttpRequestPtr& req,
     
     if (!status.empty()) cacheKey += ":st:" + status;
     if (!technology.empty()) cacheKey += ":tech:" + technology;
-    if (operator_id > 0) cacheKey += ":op:" + std::to_string(operator_id);
+    if (operator_id >= 0) cacheKey += ":op:" + std::to_string(operator_id);
     
     // Vérification cache
     auto cached = CacheService::getInstance().getCachedClusters(cacheKey);
@@ -189,7 +189,7 @@ void AntenneController::getSimplifiedCoverage(
     double minLat, double minLon, double maxLat, double maxLon, int zoom)
 {
     // ========== FILTRES OPTIONNELS ==========
-    int operator_id = req->getOptionalParameter<int>("operator_id").value_or(0);
+    int operator_id = req->getOptionalParameter<int>("operator_id").value_or(-1);
     std::string technology = req->getOptionalParameter<std::string>("technology").value_or("");
     
     LOG_INFO << "📡 GET /api/antennas/coverage/simplified - bbox: [" 
@@ -229,9 +229,10 @@ void AntenneController::getSimplifiedCoverage(
     std::string cacheKey = "coverage:simplified:bbox:" + 
                           std::to_string(minLat) + ":" + std::to_string(minLon) + ":" + 
                           std::to_string(maxLat) + ":" + std::to_string(maxLon) + 
-                          ":z:" + std::to_string(zoom) +
-                          ":op:" + std::to_string(operator_id) +
-                          ":tech:" + (technology.empty() ? "all" : technology);
+                          ":z:" + std::to_string(zoom);
+    
+    if (operator_id >= 0) cacheKey += ":op:" + std::to_string(operator_id);
+    if (!technology.empty()) cacheKey += ":tech:" + technology;
     
     // Vérification cache (TTL 5min - stable car basé sur antennes actives)
     auto cached = CacheService::getInstance().getJson(cacheKey);
